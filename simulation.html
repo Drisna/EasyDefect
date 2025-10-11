@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EasyDefect -  A Web-Based Solution for AI-Powered Anomaly Detection </title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svm-js@0.1.1/dist/svm.min.js"></script>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3f37c9;
+            --success: #4cc9f0;
+            --danger: #f72585;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --light-gray: #e9ecef;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fb;
+            color: var(--dark);
+            line-height: 1.6;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 1rem 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .logo i {
+            margin-right: 10px;
+            font-size: 1.8rem;
+        }
+        
+        .nav-links {
+            display: flex;
+            list-style: none;
+        }
+        
+        .nav-links li {
+            margin-left: 2rem;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: opacity 0.3s;
+        }
+        
+        .nav-links a:hover {
+            opacity: 0.8;
+        }
+        
+        .hero {
+            padding: 4rem 0;
+            text-align: center;
+            background-color: white;
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .hero h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+        }
+        
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--gray);
+            max-width: 800px;
+            margin: 0 auto 2rem;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+        
+        .btn:hover {
+            background-color: var(--secondary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn-outline {
+            background-color: transparent;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+        }
+        
+        .btn-outline:hover {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .btn-danger {
+            background-color: var(--danger);
+        }
+        
+        .btn-danger:hover {
+            background-color: #e01e6c;
+        }
+        
+        .btn-success {
+            background-color: var(--success);
+        }
+        
+        .btn-success:hover {
+            background-color: #3ab4d9;
+        }
+        
+        section {
+            padding: 4rem 0;
+        }
+        
+        .section-title {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .section-title h2 {
+            font-size: 2rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+        
+        .section-title p {
+            color: var(--gray);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+        
+        .feature-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .feature-icon {
+            background-color: var(--light);
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            color: var(--primary);
+            font-size: 1.5rem;
+        }
+        
+        .feature-card h3 {
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+        
+        .feature-card p {
+            color: var(--gray);
+        }
+        
+        .workflow {
+            background-color: white;
+            border-radius: 10px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            margin-top: 2rem;
+        }
+        
+        .workflow-steps {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 2rem;
+            position: relative;
+        }
+        
+        .workflow-steps::before {
+            content: '';
+            position: absolute;
+            top: 30px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: var(--light-gray);
+            z-index: 1;
+        }
+        
+        .step {
+            text-align: center;
+            position: relative;
+            z-index: 2;
+            flex: 1;
+        }
+        
+        .step-number {
+            width: 60px;
+            height: 60px;
+            background-color: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .step h4 {
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+        
+        .step p {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+        
+        .demo-section {
+            background-color: white;
+            border-radius: 10px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--light-gray);
+        }
+        
+        .tab {
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--gray);
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            color: var(--primary);
+            border-bottom: 3px solid var(--primary);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .upload-area {
+            border: 2px dashed var(--light-gray);
+            border-radius: 10px;
+            padding: 3rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: var(--primary);
+        }
+        
+        .upload-area i {
+            font-size: 3rem;
+            color: var(--gray);
+            margin-bottom: 1rem;
+        }
+        
+        .upload-area p {
+            color: var(--gray);
+            margin-bottom: 1rem;
+        }
+        
+        .image-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .preview-item {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .preview-item .remove {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: rgba(255, 255, 255, 0.8);
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--danger);
+        }
+        
+        .training-progress {
+            margin: 2rem 0;
+        }
+        
+        .progress-bar {
+            height: 10px;
+            background-color: var(--light-gray);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+        
+        .progress {
+            height: 100%;
+            background-color: var(--success);
+            width: 0%;
+            transition: width 0.5s;
+        }
+        
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+        
+        .results {
+            display: none;
+            margin-top: 2rem;
+        }
+        
+        .result-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            margin-bottom: 2rem;
+        }
+        
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .result-status {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .status-normal {
+            background-color: #e7f7ef;
+            color: #2ecc71;
+        }
+        
+        .status-anomaly {
+            background-color: #fde8e8;
+            color: #e74c3c;
+        }
+        
+        .result-image {
+            width: 100%;
+            max-width: 300px;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+        }
+        
+        .confidence {
+            margin-top: 1rem;
+        }
+        
+        .confidence-bar {
+            height: 8px;
+            background-color: var(--light-gray);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+        
+        .confidence-level {
+            height: 100%;
+            border-radius: 4px;
+        }
+        
+        .confidence-normal {
+            background-color: #2ecc71;
+        }
+        
+        .confidence-anomaly {
+            background-color: #e74c3c;
+        }
+        
+        .download-section {
+            text-align: center;
+            margin-top: 2rem;
+            padding: 2rem;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        footer {
+            background-color: var(--dark);
+            color: white;
+            padding: 3rem 0;
+            margin-top: 4rem;
+        }
+        
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+        
+        .footer-column h3 {
+            margin-bottom: 1.5rem;
+            font-size: 1.2rem;
+        }
+        
+        .footer-links {
+            list-style: none;
+        }
+        
+        .footer-links li {
+            margin-bottom: 0.8rem;
+        }
+        
+        .footer-links a {
+            color: #adb5bd;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .footer-links a:hover {
+            color: white;
+        }
+        
+        .copyright {
+            text-align: center;
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #495057;
+            color: #adb5bd;
+        }
+        
+        @media (max-width: 768px) {
+            .navbar {
+                flex-direction: column;
+            }
+            
+            .nav-links {
+                margin-top: 1rem;
+            }
+            
+            .nav-links li {
+                margin: 0 0.5rem;
+            }
+            
+            .workflow-steps {
+                flex-direction: column;
+            }
+            
+            .workflow-steps::before {
+                display: none;
+            }
+            
+            .step {
+                margin-bottom: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <nav class="navbar">
+                <div class="logo">
+                    <i class="fas fa-robot"></i>
+                    <span>EasyDefect</span>
+                </div>
+                <ul class="nav-links">
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#how-it-works">How It Works</a></li>
+                    <li><a href="#demo">Demo</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <h1>AI-Powered Product Defect Detection</h1>
+            <p>Train custom anomaly detection models with minimal good product images using advanced One-Class SVM algorithms and pre-trained feature extraction.</p>
+            <a href="#demo" class="btn">Try Demo</a>
+        </div>
+    </section>
+
+    <section id="features">
+        <div class="container">
+            <div class="section-title">
+                <h2>Key Features</h2>
+                <p>Our solution provides powerful capabilities for product quality control with minimal setup</p>
+            </div>
+            <div class="features">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-cogs"></i>
+                    </div>
+                    <h3>Customizable Models</h3>
+                    <p>Train models specific to your product with just a few good sample images. No need for defective samples during training.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <h3>One-Class SVM</h3>
+                    <p>Utilizes advanced One-Class SVM algorithm for accurate anomaly detection with minimal training data requirements.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                    <h3>Pre-trained Feature Extraction</h3>
+                    <p>Leverages MobileNet and ResNet50 for efficient feature extraction, reducing training time and improving accuracy.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-download"></i>
+                    </div>
+                    <h3>Export Ready</h3>
+                    <p>Download your trained model as a complete website for integration into your production environment.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="how-it-works">
+        <div class="container">
+            <div class="section-title">
+                <h2>How It Works</h2>
+                <p>Simple four-step process to create your custom anomaly detection system</p>
+            </div>
+            <div class="workflow">
+                <div class="workflow-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <h4>Upload Good Samples</h4>
+                        <p>Provide 10-20 images of defect-free products</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <h4>Feature Extraction</h4>
+                        <p>Our system extracts features using pre-trained models</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <h4>Train Model</h4>
+                        <p>One-Class SVM learns the normal product patterns</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">4</div>
+                        <h4>Test & Download</h4>
+                        <p>Validate the model and download for your use</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="demo">
+        <div class="container">
+            <div class="section-title">
+                <h2>Try It Yourself</h2>
+                <p>Create and test your custom anomaly detection model</p>
+            </div>
+            <div class="demo-section">
+                <div class="tabs">
+                    <div class="tab active" data-tab="train">Train Model</div>
+                    <div class="tab" data-tab="test">Test Model</div>
+                </div>
+                
+                <div class="tab-content active" id="train-tab">
+                    <div class="upload-section">
+                        <h3>Upload Training Images (Good Products Only)</h3>
+                        <div class="upload-area" id="training-upload">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Drag & Drop your product images here</p>
+                            <p>or</p>
+                            <input type="file" id="training-images" accept="image/*" multiple style="display: none;">
+                            <button class="btn btn-outline" id="browse-training">Browse Files</button>
+                        </div>
+                        <div class="image-preview" id="training-preview"></div>
+                    </div>
+                    
+                    <div class="training-actions">
+                        <button class="btn btn-success" id="train-model">Train Model</button>
+                        <button class="btn btn-outline" id="clear-training">Clear Images</button>
+                    </div>
+                    
+                    <div class="training-progress" id="training-progress" style="display: none;">
+                        <h4>Training Progress</h4>
+                        <div class="progress-bar">
+                            <div class="progress" id="progress-bar"></div>
+                        </div>
+                        <div class="progress-text">
+                            <span id="progress-status">Initializing...</span>
+                            <span id="progress-percent">0%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tab-content" id="test-tab">
+                    <div class="upload-section">
+                        <h3>Upload Test Images</h3>
+                        <div class="upload-area" id="testing-upload">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Drag & Drop your test images here</p>
+                            <p>or</p>
+                            <input type="file" id="testing-images" accept="image/*" multiple style="display: none;">
+                            <button class="btn btn-outline" id="browse-testing">Browse Files</button>
+                        </div>
+                        <div class="image-preview" id="testing-preview"></div>
+                    </div>
+                    
+                    <div class="testing-actions">
+                        <button class="btn btn-success" id="test-images">Test Images</button>
+                        <button class="btn btn-outline" id="clear-testing">Clear Images</button>
+                    </div>
+                    
+                    <div class="results" id="test-results">
+                        <h3>Test Results</h3>
+                        <div id="results-container"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="download-section" id="download-section" style="display: none;">
+                <h3>Your Model is Ready!</h3>
+                <p>Download your trained anomaly detection model as a complete website for integration into your production environment.</p>
+                <button class="btn btn-success" id="download-model">
+                    <i class="fas fa-download"></i> Download Model Website
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <footer id="contact">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-column">
+                    <h3>EasyDefect</h3>
+                    <p> A Web-Based Solution for AI-Powered Anomaly Detection .</p>
+                </div>
+                <div class="footer-column">
+                    <h3>Quick Links</h3>
+                    <ul class="footer-links">
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#how-it-works">How It Works</a></li>
+                        <li><a href="#demo">Demo</a></li>
+                        <li><a href="#">Documentation</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h3>Contact Us</h3>
+                    <ul class="footer-links">
+                        <li><a href="mailto:info@anomalydetect.ai">info@anomalydetect.ai</a></li>
+                        <li><a href="tel:+11234567890">+1 (123) 456-7890</a></li>
+                        <li><a href="#">Support Center</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="copyright">
+                <p>&copy; 2023 EasyDefect. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // DOM Elements
+        const trainingUpload = document.getElementById('training-upload');
+        const trainingImages = document.getElementById('training-images');
+        const browseTraining = document.getElementById('browse-training');
+        const trainingPreview = document.getElementById('training-preview');
+        const trainModelBtn = document.getElementById('train-model');
+        const clearTrainingBtn = document.getElementById('clear-training');
+        const trainingProgress = document.getElementById('training-progress');
+        const progressBar = document.getElementById('progress-bar');
+        const progressStatus = document.getElementById('progress-status');
+        const progressPercent = document.getElementById('progress-percent');
+        const testingUpload = document.getElementById('testing-upload');
+        const testingImages = document.getElementById('testing-images');
+        const browseTesting = document.getElementById('browse-testing');
+        const testingPreview = document.getElementById('testing-preview');
+        const testImagesBtn = document.getElementById('test-images');
+        const clearTestingBtn = document.getElementById('clear-testing');
+        const testResults = document.getElementById('test-results');
+        const resultsContainer = document.getElementById('results-container');
+        const downloadSection = document.getElementById('download-section');
+        const downloadModelBtn = document.getElementById('download-model');
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        // Training images array
+        let trainingImagesData = [];
+        let testingImagesData = [];
+        let trainedModel = null;
+        
+        // Event Listeners
+        browseTraining.addEventListener('click', () => trainingImages.click());
+        trainingImages.addEventListener('change', handleTrainingImageUpload);
+        trainingUpload.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            trainingUpload.style.borderColor = '#4361ee';
+            trainingUpload.style.backgroundColor = '#f0f4ff';
+        });
+        trainingUpload.addEventListener('dragleave', () => {
+            trainingUpload.style.borderColor = '#e9ecef';
+            trainingUpload.style.backgroundColor = 'transparent';
+        });
+        trainingUpload.addEventListener('drop', (e) => {
+            e.preventDefault();
+            trainingUpload.style.borderColor = '#e9ecef';
+            trainingUpload.style.backgroundColor = 'transparent';
+            handleTrainingImageUpload(e);
+        });
+        
+        browseTesting.addEventListener('click', () => testingImages.click());
+        testingImages.addEventListener('change', handleTestingImageUpload);
+        testingUpload.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            testingUpload.style.borderColor = '#4361ee';
+            testingUpload.style.backgroundColor = '#f0f4ff';
+        });
+        testingUpload.addEventListener('dragleave', () => {
+            testingUpload.style.borderColor = '#e9ecef';
+            testingUpload.style.backgroundColor = 'transparent';
+        });
+        testingUpload.addEventListener('drop', (e) => {
+            e.preventDefault();
+            testingUpload.style.borderColor = '#e9ecef';
+            testingUpload.style.backgroundColor = 'transparent';
+            handleTestingImageUpload(e);
+        });
+        
+        trainModelBtn.addEventListener('click', trainModel);
+        clearTrainingBtn.addEventListener('click', clearTrainingImages);
+        testImagesBtn.addEventListener('click', testImages);
+        clearTestingBtn.addEventListener('click', clearTestingImages);
+        downloadModelBtn.addEventListener('click', downloadModel);
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabId = tab.getAttribute('data-tab');
+                
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === `${tabId}-tab`) {
+                        content.classList.add('active');
+                    }
+                });
+            });
+        });
+        
+        // Functions
+        function handleTrainingImageUpload(e) {
+            const files = e.dataTransfer ? e.dataTransfer.files : e.target.files;
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (!file.type.match('image.*')) continue;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = document.createElement('div');
+                    img.className = 'preview-item';
+                    img.innerHTML = `
+                        <img src="${e.target.result}" alt="Training Image">
+                        <div class="remove" data-index="${trainingImagesData.length}">&times;</div>
+                    `;
+                    trainingPreview.appendChild(img);
+                    
+                    trainingImagesData.push({
+                        src: e.target.result,
+                        file: file
+                    });
+                    
+                    img.querySelector('.remove').addEventListener('click', removeTrainingImage);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+        
+        function handleTestingImageUpload(e) {
+            const files = e.dataTransfer ? e.dataTransfer.files : e.target.files;
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (!file.type.match('image.*')) continue;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = document.createElement('div');
+                    img.className = 'preview-item';
+                    img.innerHTML = `
+                        <img src="${e.target.result}" alt="Testing Image">
+                        <div class="remove" data-index="${testingImagesData.length}">&times;</div>
+                    `;
+                    testingPreview.appendChild(img);
+                    
+                    testingImagesData.push({
+                        src: e.target.result,
+                        file: file
+                    });
+                    
+                    img.querySelector('.remove').addEventListener('click', removeTestingImage);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+        
+        function removeTrainingImage(e) {
+            const index = parseInt(e.target.getAttribute('data-index'));
+            trainingImagesData.splice(index, 1);
+            updateTrainingPreviews();
+        }
+        
+        function removeTestingImage(e) {
+            const index = parseInt(e.target.getAttribute('data-index'));
+            testingImagesData.splice(index, 1);
+            updateTestingPreviews();
+        }
+        
+        function updateTrainingPreviews() {
+            trainingPreview.innerHTML = '';
+            trainingImagesData.forEach((img, index) => {
+                const imgElement = document.createElement('div');
+                imgElement.className = 'preview-item';
+                imgElement.innerHTML = `
+                    <img src="${img.src}" alt="Training Image">
+                    <div class="remove" data-index="${index}">&times;</div>
+                `;
+                trainingPreview.appendChild(imgElement);
+                imgElement.querySelector('.remove').addEventListener('click', removeTrainingImage);
+            });
+        }
+        
+        function updateTestingPreviews() {
+            testingPreview.innerHTML = '';
+            testingImagesData.forEach((img, index) => {
+                const imgElement = document.createElement('div');
+                imgElement.className = 'preview-item';
+                imgElement.innerHTML = `
+                    <img src="${img.src}" alt="Testing Image">
+                    <div class="remove" data-index="${index}">&times;</div>
+                `;
+                testingPreview.appendChild(imgElement);
+                imgElement.querySelector('.remove').addEventListener('click', removeTestingImage);
+            });
+        }
+        
+        function clearTrainingImages() {
+            trainingImagesData = [];
+            trainingPreview.innerHTML = '';
+        }
+        
+        function clearTestingImages() {
+            testingImagesData = [];
+            testingPreview.innerHTML = '';
+            testResults.style.display = 'none';
+            resultsContainer.innerHTML = '';
+        }
+        
+        function trainModel() {
+            if (trainingImagesData.length < 5) {
+                alert('Please upload at least 5 training images for effective model training.');
+                return;
+            }
+            
+            trainingProgress.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressPercent.textContent = '0%';
+            progressStatus.textContent = 'Initializing...';
+            
+            // Simulate training process
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 10;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    progressStatus.textContent = 'Training Complete!';
+                    
+                    // Simulate model training completion
+                    trainedModel = {
+                        name: 'My Anomaly Model',
+                        featureExtractor: 'mobilenet',
+                        nu: 0.1,
+                        accuracy: (85 + Math.random() * 10).toFixed(1)
+                    };
+                    
+                    downloadSection.style.display = 'block';
+                } else {
+                    progressStatus.textContent = `Training... ${Math.floor(progress)}%`;
+                }
+                
+                progressBar.style.width = `${progress}%`;
+                progressPercent.textContent = `${Math.floor(progress)}%`;
+            }, 300);
+        }
+        
+        function testImages() {
+            if (!trainedModel) {
+                alert('Please train a model first before testing.');
+                return;
+            }
+            
+            if (testingImagesData.length === 0) {
+                alert('Please upload at least one test image.');
+                return;
+            }
+            
+            testResults.style.display = 'block';
+            resultsContainer.innerHTML = '';
+            
+            testingImagesData.forEach((img, index) => {
+                // Simulate anomaly detection results
+                const isAnomaly = Math.random() > 0.7; // 30% chance of anomaly for demo
+                const confidence = (70 + Math.random() * 25).toFixed(1);
+                
+                const resultCard = document.createElement('div');
+                resultCard.className = 'result-card';
+                resultCard.innerHTML = `
+                    <div class="result-header">
+                        <h4>Test Image ${index + 1}</h4>
+                        <div class="result-status ${isAnomaly ? 'status-anomaly' : 'status-normal'}">
+                            ${isAnomaly ? 'DEFECT DETECTED' : 'NORMAL'}
+                        </div>
+                    </div>
+                    <img src="${img.src}" alt="Test Result" class="result-image">
+                    <div class="confidence">
+                        <p>Confidence: ${confidence}%</p>
+                        <div class="confidence-bar">
+                            <div class="confidence-level ${isAnomaly ? 'confidence-anomaly' : 'confidence-normal'}" 
+                                 style="width: ${confidence}%"></div>
+                        </div>
+                    </div>
+                `;
+                resultsContainer.appendChild(resultCard);
+            });
+        }
+        
+        function downloadModel() {
+            if (!trainedModel) {
+                alert('No model available for download. Please train a model first.');
+                return;
+            }
+            
+            // In a real implementation, this would generate and download the actual model files
+            // For this demo, we'll simulate the download process
+            alert(`Your model "${trainedModel.name}" is being prepared for download. In a real implementation, this would generate a complete website with your trained model.`);
+            
+            // Create a simple "download" simulation
+            const element = document.createElement('a');
+            element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(
+                `Anomaly Detection Model: ${trainedModel.name}\nFeature Extractor: ${trainedModel.featureExtractor}\nNu Parameter: ${trainedModel.nu}\nEstimated Accuracy: ${trainedModel.accuracy}%`
+            ));
+            element.setAttribute('download', `${trainedModel.name.replace(/\s+/g, '_')}_model.txt`);
+            element.style.display = 'none';
+            document.body.appendChild(element);
+            element.click();
+            document.body.removeChild(element);
+        }
+    </script>
+</body>
+</html>
