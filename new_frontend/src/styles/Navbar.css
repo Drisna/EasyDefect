@@ -1,0 +1,97 @@
+/* src/styles/Navbar.css */
+
+.nav-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #111827;
+  padding: 16px 40px;
+  position: fixed;
+  width: 100%;
+  top: 0;
+  border-bottom: 1px solid #1f2937;
+  z-index: 100;
+}
+
+.logo {
+  font-size: 26px;
+  font-weight: 700;
+  color: #2dd4bf;
+  letter-spacing: 0.7px;
+  display: flex;
+  align-items: center;
+}
+
+/* Robot Icon */
+.robot-icon {
+  font-size: 28px;
+  margin-right: 8px;
+  vertical-align: middle;
+  transition: transform 0.3s ease;
+}
+
+/* Small hover animation: wiggle */
+.logo:hover .robot-icon {
+  transform: rotate(-20deg) rotateX(10deg) rotateY(10deg);
+}
+
+.nav-links {
+  display: flex;
+  list-style: none;
+  gap: 35px;
+  align-items: center;
+  margin: 0;
+}
+
+.nav-links a {
+  color: #d1d5db;
+  transition: 0.3s ease;
+}
+
+.nav-links a:hover {
+  color: #2dd4bf;
+}
+
+/* Login button sleek */
+.login-btn {
+  background: #2dd4bf;
+  padding: 9px 18px;
+  border-radius: 10px;
+  color: black !important;
+  font-weight: 600;
+}
+
+/* Mobile Menu */
+.menu-icon {
+  display: none;
+  font-size: 30px;
+  cursor: pointer;
+  color: white;
+}
+
+#menu-toggle {
+  display: none;
+}
+
+@media (max-width: 768px) {
+
+  .menu-icon {
+    display: block;
+  }
+
+  .nav-links {
+    position: absolute;
+    top: 70px;
+    right: 0;
+    flex-direction: column;
+    background: #111827;
+    width: 100%;
+    padding: 20px 0;
+    gap: 18px;
+    display: none;
+  }
+
+  #menu-toggle:checked ~ .nav-links {
+    display: flex;
+  }
+}
