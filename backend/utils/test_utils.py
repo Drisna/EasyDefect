@@ -1,259 +1,190 @@
-# import os
-# import torch
-# import torch.nn as nn
-# import joblib
-# import numpy as np
-
-# from torchvision import transforms
-# from torchvision.models import resnet50
-# from PIL import Image
-
-# from models.autoencoder import Autoencoder
-
-# MODEL_DIR = "models"
-
-
-# def test_images(model_name, normal_files, defective_files):
-#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-#     model_path = os.path.join(MODEL_DIR, model_name)
-
-#     if not os.path.exists(model_path):
-#         raise FileNotFoundError(f"Model '{model_name}' not found")
-
-#     # -----------------------------
-#     # Load Encoder (ResNet50)
-#     # -----------------------------
-#     feature_model = resnet50()
-#     feature_model.fc = nn.Identity()
-
-#     feature_model.load_state_dict(
-#         torch.load(os.path.join(model_path, "encoder.pth"), map_location=device)
-#     )
-
-#     feature_model.to(device)
-#     feature_model.eval()
-
-#     # -----------------------------
-#     # Load Autoencoder
-#     # -----------------------------
-#     autoencoder = Autoencoder()
-
-#     autoencoder.load_state_dict(
-#         torch.load(os.path.join(model_path, "autoencoder.pth"), map_location=device)
-#     )
-
-#     autoencoder.to(device)
-#     autoencoder.eval()
-
-#     # -----------------------------
-#     # Load Scaler & Threshold
-#     # -----------------------------
-#     scaler = joblib.load(os.path.join(model_path, "scaler.joblib"))
-#     threshold = joblib.load(os.path.join(model_path, "threshold.joblib"))
-
-#     # -----------------------------
-#     # Image Transform
-#     # -----------------------------
-#     transform = transforms.Compose([
-#         transforms.Resize(256),
-#         transforms.CenterCrop(224),
-#         transforms.ToTensor(),
-#         transforms.Normalize(
-#             [0.485, 0.456, 0.406],
-#             [0.229, 0.224, 0.225]
-#         )
-#     ])
-
-#     results = []
-#     correct = 0
-#     total = 0
-
-#     def process_files(files, ground_truth):
-#         nonlocal correct, total
-
-#         for file in files:
-#             img = Image.open(file).convert("RGB")
-#             img = transform(img).unsqueeze(0).to(device)
-
-#             with torch.no_grad():
-#                 features = feature_model(img).cpu().numpy()
-#                 features = scaler.transform(features)
-
-#                 tensor = torch.tensor(features, dtype=torch.float32).to(device)
-#                 reconstruction = autoencoder(tensor)
-
-#                 error = torch.mean((reconstruction - tensor) ** 2).item()
-
-#             prediction = "Defective" if error > threshold else "Normal"
-
-#             if prediction == ground_truth:
-#                 correct += 1
-
-#             total += 1
-
-#             results.append({
-#                 "filename": file.filename,
-#                 "prediction": prediction,
-#                 "actual": ground_truth,
-#                 "error": round(error, 6)
-#             })
-
-#     # Process both categories
-#     process_files(normal_files, "Normal")
-#     process_files(defective_files, "Defective")
-
-#     accuracy = (correct / total) * 100 if total > 0 else 0
-
-#     return {
-#         "accuracy": round(accuracy, 2),
-#         "correct": correct,
-#         "total": total,
-#         "results": results
-#     }
-
 import os
+import sys
 import torch
 import torch.nn as nn
 import joblib
 import numpy as np
-
 from torchvision import transforms
-from torchvision.models import resnet50
+from torchvision.models import resnet50, ResNet50_Weights
 from PIL import Image
-from torchvision.models import ResNet50_Weights
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-from models.autoencoder import Autoencoder
+class Autoencoder(nn.Module):
+    def __init__(self, input_dim=2048):
+        super(Autoencoder, self).__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, 512), nn.ReLU(), nn.Linear(512, 256)
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(256, 512), nn.ReLU(), nn.Linear(512, input_dim)
+        )
 
-MODEL_DIR = "models"
-
-
-def validate_model_files(model_path):
-    required_files = [
-        "encoder.pth",
-        "autoencoder.pth",
-        "scaler.joblib",
-        "threshold.joblib"
-    ]
-
-    for file in required_files:
-        if not os.path.exists(os.path.join(model_path, file)):
-            raise FileNotFoundError(f"{file} missing in model folder")
+    def forward(self, x):
+        return self.decoder(self.encoder(x))
 
 
-def test_images(model_name, normal_files, defective_files):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+BASE_DIR  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_DIR = os.path.join(BASE_DIR, "models")
+
+# Identical transform to train_utils.py
+TRANSFORM = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+])
+
+_model_cache = {}
+
+
+def load_artifacts(model_name: str) -> dict:
+    if model_name in _model_cache:
+        return _model_cache[model_name]
 
     model_path = os.path.join(MODEL_DIR, model_name)
-
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model '{model_name}' not found")
+        raise FileNotFoundError(f"Model '{model_name}' not found at: {model_path}")
 
-    validate_model_files(model_path)
+    required = ["encoder.pth", "autoencoder.pth", "scaler.joblib", "threshold.joblib"]
+    missing  = [f for f in required if not os.path.exists(os.path.join(model_path, f))]
+    if missing:
+        raise FileNotFoundError(f"Missing files: {missing}")
 
-    print("=== LOADING MODEL ===")
-    print("Model:", model_name)
-    print("Device:", device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"[test] Loading model '{model_name}' on {device}")
 
-    # -----------------------------
-    # Load Encoder (ResNet50)
-    # -----------------------------
-   # feature_model = resnet50(weights=None)  # important
     feature_model = resnet50(weights=ResNet50_Weights.DEFAULT)
-
     feature_model.fc = nn.Identity()
-
     feature_model.load_state_dict(
         torch.load(os.path.join(model_path, "encoder.pth"), map_location=device)
     )
+    feature_model.to(device).eval()
 
-    feature_model.to(device)
-    feature_model.eval()
-
-    print("✅ Encoder loaded")
-
-    # -----------------------------
-    # Load Autoencoder
-    # -----------------------------
-    autoencoder = Autoencoder()
-
+    autoencoder = Autoencoder(input_dim=2048)
     autoencoder.load_state_dict(
         torch.load(os.path.join(model_path, "autoencoder.pth"), map_location=device)
     )
+    autoencoder.to(device).eval()
 
-    autoencoder.to(device)
-    autoencoder.eval()
+    scaler    = joblib.load(os.path.join(model_path, "scaler.joblib"))
+    threshold = float(joblib.load(os.path.join(model_path, "threshold.joblib")))
 
-    print("✅ Autoencoder loaded")
+    print(f"[test] Threshold loaded: {threshold:.8f}")
 
-    # -----------------------------
-    # Load Scaler & Threshold
-    # -----------------------------
-    scaler = joblib.load(os.path.join(model_path, "scaler.joblib"))
-    threshold = joblib.load(os.path.join(model_path, "threshold.joblib"))
+    artifacts = {
+        "feature_model": feature_model,
+        "autoencoder":   autoencoder,
+        "scaler":        scaler,
+        "threshold":     threshold,
+        "device":        device,
+    }
+    _model_cache[model_name] = artifacts
+    return artifacts
 
-    print("✅ Scaler loaded")
-    print("✅ Threshold loaded:", threshold)
-    print("======================")
 
-    # -----------------------------
-    # Image Transform
-    # -----------------------------
-    transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(
-            [0.485, 0.456, 0.406],
-            [0.229, 0.224, 0.225]
-        )
-    ])
+def predict_single(pil_image, artifacts: dict) -> dict:
+    device        = artifacts["device"]
+    feature_model = artifacts["feature_model"]
+    autoencoder   = artifacts["autoencoder"]
+    scaler        = artifacts["scaler"]
+    threshold     = artifacts["threshold"]
+
+    img_tensor = TRANSFORM(pil_image.convert("RGB")).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        # Step 1: ResNet50 features
+        features = feature_model(img_tensor).squeeze().cpu().numpy()
+
+        # Step 2: Scale — same scaler fitted on training data
+        scaled = scaler.transform([features])  # shape (1, 2048)
+
+        # Step 3: Reconstruct
+        inp   = torch.tensor(scaled, dtype=torch.float32).to(device)
+        recon = autoencoder(inp)
+        error = float(torch.mean((recon - inp) ** 2).item())
+
+    # ── Same logic as your working standalone script ─────────────────────────
+    # Your standalone used: "Normal" if error <= abs(effective_threshold)
+    # We do the same here. abs() handles any edge case where threshold
+    # was saved as negative.
+    prediction = "Normal" if error <= abs(threshold) else "Defective"
+
+    return {
+        "prediction": prediction,
+        "error":      round(error, 6),
+        "threshold":  round(abs(threshold), 6),
+    }
+
+
+def test_images(model_name: str, normal_files: list, defective_files: list) -> dict:
+    artifacts = load_artifacts(model_name)
+    threshold = artifacts["threshold"]
 
     results = []
     correct = 0
-    total = 0
+    total   = 0
 
-    def process_files(files, ground_truth):
+    def process(file_list, ground_truth: str):
         nonlocal correct, total
+        for f in file_list:
+            if not f or f.filename == "":
+                continue
+            try:
+                f.stream.seek(0)                          # reset stream — critical for Werkzeug
+                pil_img = Image.open(f.stream).convert("RGB")
+                f.stream.seek(0)
 
-        for file in files:
-            img = Image.open(file).convert("RGB")
-            img = transform(img).unsqueeze(0).to(device)
+                result     = predict_single(pil_img, artifacts)
+                is_correct = (result["prediction"] == ground_truth)
 
-            with torch.no_grad():
-                features = feature_model(img).cpu().numpy()
-                features = scaler.transform(features)
+                if is_correct:
+                    correct += 1
+                total += 1
 
-                tensor = torch.tensor(features, dtype=torch.float32).to(device)
-                reconstruction = autoencoder(tensor)
+                print(
+                    f"  {f.filename:<35} "
+                    f"error={result['error']:.6f}  "
+                    f"threshold={abs(threshold):.6f}  "
+                    f"-> {result['prediction']}  "
+                    f"(actual={ground_truth})  "
+                    f"{'OK' if is_correct else 'WRONG'}"
+                )
 
-                error = torch.mean((reconstruction - tensor) ** 2).item()
+                results.append({
+                    "filename":   f.filename,
+                    "prediction": result["prediction"],
+                    "actual":     ground_truth,
+                    "error":      result["error"],
+                    "threshold":  round(abs(threshold), 6),
+                    "correct":    is_correct,
+                })
 
-            prediction = "Defective" if error > threshold else "Normal"
+            except Exception as e:
+                import traceback
+                print(f"  ERROR on {f.filename}: {e}")
+                traceback.print_exc()
+                results.append({
+                    "filename":   f.filename,
+                    "prediction": "Error",
+                    "actual":     ground_truth,
+                    "error":      None,
+                    "correct":    False,
+                })
+                total += 1
 
-            print(f"{file.filename} → Error: {error:.6f} → {prediction}")
+    print(f"\n[test] model={model_name}  threshold={abs(threshold):.8f}")
+    process(normal_files,    "Normal")
+    process(defective_files, "Defective")
+    print(f"[test] Result: {correct}/{total} correct\n")
 
-            if prediction == ground_truth:
-                correct += 1
-
-            total += 1
-
-            results.append({
-                "filename": file.filename,
-                "prediction": prediction,
-                "actual": ground_truth,
-                "error": round(error, 6)
-            })
-
-    process_files(normal_files, "Normal")
-    process_files(defective_files, "Defective")
-
-    accuracy = (correct / total) * 100 if total > 0 else 0
+    accuracy = round((correct / total) * 100, 2) if total > 0 else 0
 
     return {
-        "accuracy": round(accuracy, 2),
-        "correct": correct,
-        "total": total,
-        "results": results
+        "model_name": model_name,
+        "accuracy":   accuracy,
+        "correct":    correct,
+        "total":      total,
+        "results":    results,
     }

@@ -1,10 +1,3 @@
-import sys
-import os
-
-# Ensure backend/ root is on the path so 'utils' can always be found
-# regardless of how Flask is launched
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from flask import Blueprint, request, jsonify
 from utils.test_utils import test_images
 
@@ -17,9 +10,9 @@ def test_model():
     Batch testing endpoint.
 
     Form fields:
-        model_name       -- name of trained model folder inside models/
-        normal_files     -- one or more normal images   (optional)
-        defective_files  -- one or more defective images (optional)
+        model_name       — name of trained model folder inside models/
+        normal_files     — one or more normal images   (optional)
+        defective_files  — one or more defective images (optional)
     """
     model_name = request.form.get("model_name", "").strip()
 
@@ -44,7 +37,7 @@ def test_model():
         return jsonify({"error": str(e)}), 404
 
     except Exception as e:
-        print("Testing Error:", str(e))
+        print("❌ Testing Error:", str(e))
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

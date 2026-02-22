@@ -1,31 +1,43 @@
-from flask import Blueprint, request, jsonify
 import os
+import sys
+import traceback
+from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 predict_bp = Blueprint("predict", __name__)
 
-# Allowed image extensions
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "bmp"}
 
-# Upload folder
-UPLOAD_FOLDER = "uploads"
+BASE_DIR      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Check if file type is allowed
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+# Track whether we've cleared the folder for this training session.
+# Set to False whenever /clear is called, True after first upload.
+_session_started = False
 
-# Save file to uploads folder
-def save_file(file):
-    filename = secure_filename(file.filename)
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(file_path)
-    return file_path
+print(f"[predict] Upload folder: {UPLOAD_FOLDER}")
+
+
+def allowed_file(filename):
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+    )
+
 
 @predict_bp.route("/", methods=["POST"])
 def upload_image():
+    """
+    Receives a single training image and saves it to the uploads folder.
+    Called by TrainingPage.js for each image selected.
+    """
+    global _session_started
+
     if "file" not in request.files:
-        return jsonify({"success": False, "message": "No file uploaded"}), 400
+        return jsonify({"success": False, "message": "No file part in request"}), 400
 
     file = request.files["file"]
 
@@ -33,14 +45,55 @@ def upload_image():
         return jsonify({"success": False, "message": "Empty filename"}), 400
 
     if not allowed_file(file.filename):
-        return jsonify({"success": False, "message": "Invalid file type"}), 400
+        return jsonify({
+            "success": False,
+            "message": f"Invalid file type. Allowed: jpg, jpeg, png, bmp"
+        }), 400
 
     try:
-        file_path = save_file(file)
+        # ── KEY FIX: seek to start before saving ─────────────────────────
+        # Ensures the full file is written even if stream was partially read
+        file.stream.seek(0)
+
+        filename  = secure_filename(file.filename)
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
+
+        print(f"[predict] Saved: {filename}  ({os.path.getsize(file_path)} bytes)")
+
         return jsonify({
-            "success": True,
-            "message": "File uploaded successfully",
+            "success":   True,
+            "message":   "File uploaded successfully",
             "file_path": file_path
         })
+
     except Exception as e:
+        print(f"[predict] EXCEPTION:")
+        traceback.print_exc()
         return jsonify({"success": False, "message": f"Upload failed: {str(e)}"}), 500
+
+
+@predict_bp.route("/clear", methods=["DELETE"])
+def clear_uploads():
+    """
+    Delete all files in the uploads folder.
+    Called from TrainingPage after training completes,
+    and from TrainingPage on component mount to clear stale images.
+    """
+    global _session_started
+    _session_started = False
+
+    try:
+        deleted = 0
+        for filename in os.listdir(UPLOAD_FOLDER):
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+                deleted += 1
+
+        print(f"[predict] Cleared {deleted} files from uploads folder")
+        return jsonify({"success": True, "message": f"Cleared {deleted} files"})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
