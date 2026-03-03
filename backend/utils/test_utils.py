@@ -99,6 +99,7 @@ def predict_single(pil_image, artifacts: dict) -> dict:
 
         # Step 2: Scale — same scaler fitted on training data
         scaled = scaler.transform([features])  # shape (1, 2048)
+        scaled = scaled.clip(-10, 10)
 
         # Step 3: Reconstruct
         inp   = torch.tensor(scaled, dtype=torch.float32).to(device)
@@ -109,7 +110,7 @@ def predict_single(pil_image, artifacts: dict) -> dict:
     # Your standalone used: "Normal" if error <= abs(effective_threshold)
     # We do the same here. abs() handles any edge case where threshold
     # was saved as negative.
-    prediction = "Normal" if error <= abs(threshold) else "Defective"
+    prediction = "Normal" if error <= threshold else "Defective"
 
     return {
         "prediction": prediction,
@@ -146,7 +147,7 @@ def test_images(model_name: str, normal_files: list, defective_files: list) -> d
                 print(
                     f"  {f.filename:<35} "
                     f"error={result['error']:.6f}  "
-                    f"threshold={abs(threshold):.6f}  "
+                    f"threshold={threshold:.6f}  "
                     f"-> {result['prediction']}  "
                     f"(actual={ground_truth})  "
                     f"{'OK' if is_correct else 'WRONG'}"

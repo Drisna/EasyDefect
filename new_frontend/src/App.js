@@ -11,17 +11,13 @@ import TestingPage from "./pages/TestingPage";
 import NotFound from "./pages/NotFound";
 
 function App() {
-  // State to store backend response
   const [backendStatus, setBackendStatus] = useState(null);
   const [backendError, setBackendError] = useState(null);
 
   useEffect(() => {
-    // Call the backend health API
     fetch("http://localhost:5000/api/health/")
       .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP error! Status: ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
         return res.json();
       })
       .then((data) => {
@@ -38,26 +34,40 @@ function App() {
     <Router>
       <Navbar />
 
-      {/* Display backend status at top of app */}
-      <div style={{ padding: "10px", backgroundColor: "#f2f2f2" }}>
-        {backendStatus && (
-          <p style={{ color: "green" }}>
-            Backend connected: {backendStatus.message}
-          </p>
-        )}
-        {backendError && (
-          <p style={{ color: "red" }}>Backend error: {backendError}</p>
-        )}
-      </div>
+      {/* 🔥 FIX: Only show status bar if there's something to show,
+          and use dark theme colours consistent with the rest of the UI */}
+      {(backendStatus || backendError) && (
+        <div style={{
+          padding: "8px 20px",
+          backgroundColor: "#0f172a",
+          borderBottom: "1px solid #1f2937",
+          textAlign: "center",
+          fontSize: "13px",
+          marginTop: "64px"   // clears the fixed navbar
+        }}>
+          {backendStatus && (
+            <span style={{ color: "#22c55e" }}>
+              ✅ Backend connected: {backendStatus.message}
+            </span>
+          )}
+          {backendError && (
+            <span style={{ color: "#ef4444" }}>
+              ❌ Backend error: {backendError}
+            </span>
+          )}
+        </div>
+      )}
 
-      <Routes>
-        <Route path="/" element={<HomePage backendStatus={backendStatus} />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/train" element={<TrainingPage />} />
-        <Route path="/test" element={<TestingPage />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <div className="main-body">
+        <Routes>
+          <Route path="/" element={<HomePage backendStatus={backendStatus} />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/train" element={<TrainingPage />} />
+          <Route path="/test" element={<TestingPage />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </div>
 
       <Footer />
     </Router>

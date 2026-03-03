@@ -1,18 +1,26 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/TrainingPage.css";
 
-const TrainingPage = () => {
-  const [images, setImages] = useState([]);
-  const [modelName, setModelName] = useState("");
-  const [trainingStatus, setTrainingStatus] = useState("idle"); // idle | training | trained
-  const [uploadStatus, setUploadStatus] = useState({}); // track individual upload status
+const API = "http://localhost:5000";
 
+const TrainingPage = () => {
+  const [images, setImages]               = useState([]);
+  const [modelName, setModelName]         = useState("");
+  const [trainingStatus, setTrainingStatus] = useState("idle"); // idle | training | trained
   const navigate = useNavigate();
 
-  // Handle file selection and upload
+  // 🔥 FIX 1: Clear stale uploads on mount so old sessions don't pollute training
+  useEffect(() => {
+    fetch(`${API}/api/predict/clear`, { method: "DELETE" })
+      .then(res => res.json())
+      .then(data => console.log("[mount] Cleared uploads:", data.message))
+      .catch(err => console.warn("[mount] Could not clear uploads:", err));
+  }, []);
+
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
+
     const newImages = files.map((file) => ({
       file,
       url: URL.createObjectURL(file),
@@ -22,22 +30,18 @@ const TrainingPage = () => {
 
     setImages((prev) => [...prev, ...newImages]);
 
-    // Upload each file to backend
+    // Upload each file to backend immediately
     for (const img of newImages) {
       const formData = new FormData();
       formData.append("file", img.file);
 
       try {
-        const res = await fetch("http://localhost:5000/api/predict/", {
-          method: "POST",
-          body: formData,
-        });
-
+        const res  = await fetch(`${API}/api/predict/`, { method: "POST", body: formData });
         const data = await res.json();
 
         setImages((prev) =>
           prev.map((item) =>
-            item === img
+            item.file === img.file
               ? { ...item, uploaded: data.success, message: data.message }
               : item
           )
@@ -45,7 +49,7 @@ const TrainingPage = () => {
       } catch (err) {
         setImages((prev) =>
           prev.map((item) =>
-            item === img
+            item.file === img.file
               ? { ...item, uploaded: false, message: "Upload failed" }
               : item
           )
@@ -55,70 +59,75 @@ const TrainingPage = () => {
     }
   };
 
-  // Remove image from preview
   const removeImage = (index) => {
     setImages(images.filter((_, i) => i !== index));
   };
 
-  // Handle training
   const handleTrain = async () => {
     if (!modelName.trim()) {
       alert("Please enter a model name");
       return;
     }
 
-    if (images.length < 25) {
-      alert("Minimum 25 images are required to train the model");
+    // 🔥 FIX 2: Backend requires 20, so check 20 (was checking 25 — inconsistent)
+    if (images.length < 20) {
+      alert("Minimum 20 images are required to train the model");
       return;
     }
 
-    // Ensure all images are uploaded
     const notUploaded = images.filter((img) => !img.uploaded);
     if (notUploaded.length > 0) {
-      alert("Please wait for all images to finish uploading before training");
+      alert(`${notUploaded.length} image(s) haven't finished uploading. Please wait.`);
       return;
     }
 
     setTrainingStatus("training");
 
     try {
-      // Call backend to start training
-      const response = await fetch("http://localhost:5000/api/train/", {
+      const response = await fetch(`${API}/api/train/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model_name: modelName, epochs: 50 }), // epochs can be dynamic
+        body: JSON.stringify({ model_name: modelName, epochs: 50 }),
       });
 
       const data = await response.json();
-      console.log(data);
+      console.log("Training response:", data);
 
       if (data.success) {
+        // 🔥 FIX 3: Clear uploads after training so they don't affect next session
+        await fetch(`${API}/api/predict/clear`, { method: "DELETE" });
         setTrainingStatus("trained");
-        alert(`Training Complete: ${data.message}`);
+        alert(`✅ Training Complete: ${data.message}`);
       } else {
         setTrainingStatus("idle");
-        alert(`Training Failed: ${data.message}`);
+        alert(`❌ Training Failed: ${data.message}`);
       }
     } catch (err) {
       console.error("Error training model:", err);
       setTrainingStatus("idle");
-      alert("Training failed due to server error");
+      alert("Training failed due to server error. Is the backend running?");
     }
   };
+
+  const uploadedCount = images.filter(i => i.uploaded).length;
 
   return (
     <div className="training-page">
       <h1>Train Your Model</h1>
 
       <div className="training-container">
-        {/* LEFT HALF – IMAGE PREVIEW */}
+
+        {/* LEFT — Image Preview */}
         <div className="image-panel">
           <h3>Training Images</h3>
-          <p className="count-text">{images.length} / 25 images selected</p>
+          <p className="count-text">
+            {images.length} selected &nbsp;|&nbsp; {uploadedCount} uploaded to server
+          </p>
 
           <input
             type="file"
             multiple
+            accept=".jpg,.jpeg,.png,.bmp"
             onChange={handleImageUpload}
             disabled={trainingStatus === "training"}
           />
@@ -134,11 +143,7 @@ const TrainingPage = () => {
                 >
                   ✕
                 </button>
-                <p
-                  className={`upload-status ${
-                    img.uploaded ? "success-text" : "error-text"
-                  }`}
-                >
+                <p className={`upload-status ${img.uploaded ? "success-text" : "error-text"}`}>
                   {img.message}
                 </p>
               </div>
@@ -146,7 +151,7 @@ const TrainingPage = () => {
           </div>
         </div>
 
-        {/* RIGHT HALF – TRAINING SETUP */}
+        {/* RIGHT — Training Controls */}
         <div className="train-panel">
           <div className="train-center">
             <h3>Training Setup</h3>
@@ -166,26 +171,25 @@ const TrainingPage = () => {
             )}
 
             {trainingStatus === "training" && (
-              <p className="note">Training in progress... This may take a few minutes</p>
+              <div>
+                <div className="spinner"></div>
+                <p className="note">Training in progress… this may take a few minutes.</p>
+              </div>
             )}
 
             {trainingStatus === "trained" && (
               <>
-                <p className="success-text">Training Complete ✅</p>
-                <button
-                  className="btn secondary"
-                  onClick={() => navigate("/test")}
-                >
-                  Test Model
+                <p className="success-text">✅ Training Complete!</p>
+                <button className="btn secondary" onClick={() => navigate("/test")}>
+                  Test Model →
                 </button>
               </>
             )}
 
-            <p className="note">
-              Minimum 25 normal images required for training
-            </p>
+            <p className="note">Minimum 20 normal images required for training.</p>
           </div>
         </div>
+
       </div>
     </div>
   );

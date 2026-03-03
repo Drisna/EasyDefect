@@ -18,7 +18,6 @@ class Autoencoder(nn.Module):
         self.decoder = nn.Sequential(
             nn.Linear(256, 512), nn.ReLU(), nn.Linear(512, input_dim)
         )
-
     def forward(self, x):
         return self.decoder(self.encoder(x))
 
@@ -28,9 +27,9 @@ def load_images_and_features(dataset_path, model, device):
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225]),
     ])
-
     image_files = [
         f for f in os.listdir(dataset_path)
         if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))
@@ -41,8 +40,8 @@ def load_images_and_features(dataset_path, model, device):
     for filename in image_files:
         img_path = os.path.join(dataset_path, filename)
         try:
-            img  = Image.open(img_path).convert('RGB')
-            img  = transform(img).unsqueeze(0).to(device)
+            img = Image.open(img_path).convert('RGB')
+            img = transform(img).unsqueeze(0).to(device)
             with torch.no_grad():
                 feat = model(img).squeeze().cpu().numpy()
             features.append(feat)
@@ -51,11 +50,10 @@ def load_images_and_features(dataset_path, model, device):
 
     if not features:
         raise ValueError(f"No valid images in: {dataset_path}")
-
     return np.array(features)
 
 
-def train_anomaly_detector(dataset_path, model_save_path, epochs=100, threshold_percentile=95):
+def train_anomaly_detector(dataset_path, model_save_path, epochs=100):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"\n[train] Device: {device}")
 
@@ -64,19 +62,18 @@ def train_anomaly_detector(dataset_path, model_save_path, epochs=100, threshold_
     feature_model.to(device).eval()
 
     features = load_images_and_features(dataset_path, feature_model, device)
-
     if len(features) < 20:
         raise ValueError(f"Need at least 20 images. Found: {len(features)}")
 
-    print(f"[train] Feature shape : {features.shape}")
+    print(f"[train] Feature shape: {features.shape}")
 
-    scaler          = StandardScaler()
+    scaler = StandardScaler()
     scaled_features = scaler.fit_transform(features)
+    scaled_features = scaled_features.clip(-10, 10)
 
     autoencoder = Autoencoder(input_dim=scaled_features.shape[1]).to(device)
-    optimizer   = torch.optim.Adam(autoencoder.parameters(), lr=1e-3)
-    criterion   = nn.MSELoss()
-
+    optimizer = torch.optim.Adam(autoencoder.parameters(), lr=1e-3)
+    criterion = nn.MSELoss()
     inputs_t = torch.tensor(scaled_features, dtype=torch.float32).to(device)
 
     print(f"[train] Training for {epochs} epochs...")
@@ -89,34 +86,42 @@ def train_anomaly_detector(dataset_path, model_save_path, epochs=100, threshold_
         if epoch % 20 == 0 or epoch == epochs - 1:
             print(f"  Epoch {epoch:>3}/{epochs}  loss={loss.item():.8f}")
 
-    # ── Compute errors on ALL training images ────────────────────────────────
     autoencoder.eval()
     with torch.no_grad():
-        recon  = autoencoder(inputs_t)
+        recon = autoencoder(inputs_t)
         errors = torch.mean((recon - inputs_t) ** 2, dim=1).cpu().numpy()
+
+    mean_err = errors.mean()
+    std_err  = errors.std()
+    max_err  = errors.max()
 
     print(f"\n[train] Training reconstruction errors:")
     print(f"  min  = {errors.min():.8f}")
-    print(f"  mean = {errors.mean():.8f}")
-    print(f"  max  = {errors.max():.8f}")
+    print(f"  mean = {mean_err:.8f}")
+    print(f"  std  = {std_err:.8f}")
+    print(f"  max  = {max_err:.8f}")
     print(f"  p95  = {np.percentile(errors, 95):.8f}")
     print(f"  p99  = {np.percentile(errors, 99):.8f}")
 
-    # ── Threshold: same percentile as your working standalone script ─────────
-    # We use p95 (same default as your original) but multiply by 3.0
-    # to give test images room to vary slightly from training images.
-    # Your standalone script effectively did this by using abs() on a
-    # threshold that was computed differently — this multiplier achieves
-    # the same effect explicitly and reliably.
-    base_threshold = float(np.percentile(errors, threshold_percentile))
-    threshold      = base_threshold * 3.0
+    # ── FIXED THRESHOLD: mean + 5×std ────────────────────────────────────────
+    # Old code used p95 × 3.0 which gave a threshold of ~0.00009.
+    # Normal test images (unseen during training) easily score 0.001+,
+    # making EVERYTHING look defective.
+    #
+    # mean + 5×std sets the threshold relative to actual training error
+    # distribution and gives enough headroom for normal test images.
+    # Safety floor ensures all training images would pass as Normal.
+    N_SIGMA   = 8
+    threshold = float(mean_err + N_SIGMA * std_err)
+    threshold = max(threshold, float(max_err) * 2)  # safety floor
 
-    print(f"\n[train] base p{threshold_percentile} = {base_threshold:.8f}")
-    print(f"[train] final threshold (x3.0) = {threshold:.8f}")
+    print(f"\n[train] Final threshold (mean + {N_SIGMA}×std): {threshold:.8f}")
 
     os.makedirs(model_save_path, exist_ok=True)
-    torch.save(feature_model.state_dict(),  os.path.join(model_save_path, 'encoder.pth'))
-    torch.save(autoencoder.state_dict(),    os.path.join(model_save_path, 'autoencoder.pth'))
+    torch.save(feature_model.state_dict(),
+               os.path.join(model_save_path, 'encoder.pth'))
+    torch.save(autoencoder.state_dict(),
+               os.path.join(model_save_path, 'autoencoder.pth'))
     joblib.dump(scaler,    os.path.join(model_save_path, 'scaler.joblib'))
     joblib.dump(threshold, os.path.join(model_save_path, 'threshold.joblib'))
 
