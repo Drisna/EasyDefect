@@ -21,88 +21,103 @@ TRANSFORM = transforms.Compose([
 
 BASE_DIR  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR = os.path.join(BASE_DIR, "models")
-_model_cache = {}
+_cache    = {}
 
 
-class FeatureExtractor(nn.Module):
-    def __init__(self):
+class Autoencoder(nn.Module):
+    def __init__(self, input_dim=2048):
         super().__init__()
-        backbone = resnet50(weights=ResNet50_Weights.DEFAULT)
-        self.layer0 = nn.Sequential(backbone.conv1, backbone.bn1, backbone.relu, backbone.maxpool)
-        self.layer1 = backbone.layer1
-        self.layer2 = backbone.layer2
-        self.layer3 = backbone.layer3
-        self.pool   = nn.AdaptiveAvgPool2d((1, 1))
-
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, 512), nn.BatchNorm1d(512), nn.ReLU(),
+            nn.Linear(512, 128),       nn.BatchNorm1d(128), nn.ReLU(),
+            nn.Linear(128, 64),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(64, 128),        nn.BatchNorm1d(128), nn.ReLU(),
+            nn.Linear(128, 512),       nn.BatchNorm1d(512), nn.ReLU(),
+            nn.Linear(512, input_dim),
+        )
     def forward(self, x):
-        x  = self.layer0(x)
-        x  = self.layer1(x)
-        f2 = self.layer2(x)
-        f3 = self.layer3(f2)
-        v2 = self.pool(f2).flatten(1)
-        v3 = self.pool(f3).flatten(1)
-        return torch.cat([v2, v3], dim=1)
+        return self.decoder(self.encoder(x))
 
 
-def l2_normalize(feat):
-    norm = np.linalg.norm(feat)
-    return (feat / norm).astype(np.float32) if norm > 0 else feat.astype(np.float32)
-
-
-def extract_feature(img_path, model, device):
+def extract_feature(img_path, feature_model, device):
+    """L2-normalized ResNet50 feature — identical to train_utils."""
     img    = Image.open(img_path).convert('RGB')
     tensor = TRANSFORM(img).unsqueeze(0).to(device)
     with torch.no_grad():
-        feat = model(tensor).squeeze().cpu().numpy()
-    return l2_normalize(feat)
+        feat = feature_model(tensor).squeeze().cpu().numpy()
+    norm = np.linalg.norm(feat)
+    if norm > 0:
+        feat = feat / norm
+    return feat.astype(np.float32)
 
 
 def load_artifacts(model_name: str) -> dict:
-    if model_name in _model_cache:
-        return _model_cache[model_name]
+    if model_name in _cache:
+        return _cache[model_name]
 
     model_path = os.path.join(MODEL_DIR, model_name)
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model '{model_name}' not found at: {model_path}")
 
-    if not os.path.exists(os.path.join(model_path, 'memory_bank.joblib')):
-        raise FileNotFoundError(
-            f"Old model format. Delete '{model_name}' folder and retrain."
-        )
+    required = ["encoder.pth", "autoencoder.pth", "threshold.joblib"]
+    missing  = [f for f in required if not os.path.exists(os.path.join(model_path, f))]
+    if missing:
+        raise FileNotFoundError(f"Missing: {missing}. Retrain the model.")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[test] Loading model '{model_name}' on {device}")
+    print(f"[test] Loading '{model_name}' on {device}")
 
-    model       = FeatureExtractor().to(device).eval()
-    memory_bank = joblib.load(os.path.join(model_path, 'memory_bank.joblib'))
-    threshold   = float(joblib.load(os.path.join(model_path, 'threshold.joblib')))
+    feature_model = resnet50(weights=ResNet50_Weights.DEFAULT)
+    feature_model.fc = nn.Identity()
+    feature_model.load_state_dict(
+        torch.load(os.path.join(model_path, "encoder.pth"), map_location=device)
+    )
+    feature_model.to(device).eval()
 
-    print(f"[test] Memory bank : {memory_bank.shape}")
-    print(f"[test] Threshold   : {threshold:.6f}")
+    autoencoder = Autoencoder(input_dim=2048)
+    autoencoder.load_state_dict(
+        torch.load(os.path.join(model_path, "autoencoder.pth"), map_location=device)
+    )
+    autoencoder.to(device).eval()
 
-    artifacts = {
-        "model": model, "memory_bank": memory_bank,
-        "threshold": threshold, "device": device,
+    threshold = float(joblib.load(os.path.join(model_path, "threshold.joblib")))
+    print(f"[test] Threshold: {threshold:.8f}")
+
+    arts = {
+        "feature_model": feature_model,
+        "autoencoder":   autoencoder,
+        "threshold":     threshold,
+        "device":        device,
     }
-    _model_cache[model_name] = artifacts
-    return artifacts
+    _cache[model_name] = arts
+    return arts
 
 
-def predict_from_path(image_path, artifacts):
-    feat  = extract_feature(image_path, artifacts["model"], artifacts["device"])
-    dists = np.linalg.norm(artifacts["memory_bank"] - feat, axis=1)
-    score = float(np.sort(dists)[:3].mean())  # k=3, matches training
-    label = "Normal" if score <= artifacts["threshold"] else "Defective"
-    return {"prediction": label, "error": round(score, 6),
-            "threshold": round(artifacts["threshold"], 6)}
+def predict_from_path(image_path: str, arts: dict) -> dict:
+    device        = arts["device"]
+    feature_model = arts["feature_model"]
+    autoencoder   = arts["autoencoder"]
+    threshold     = arts["threshold"]
+
+    feat = extract_feature(image_path, feature_model, device)   # (2048,) L2-norm
+    inp  = torch.tensor(feat, dtype=torch.float32).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        out   = autoencoder(inp)
+        error = float(torch.mean((out - inp) ** 2).item())
+
+    label = "Normal" if error <= threshold else "Defective"
+    return {"prediction": label, "error": round(error, 8), "threshold": round(threshold, 8)}
 
 
-def test_images(model_name, normal_files, defective_files):
-    artifacts = load_artifacts(model_name)
-    threshold = artifacts["threshold"]
+def test_images(model_name: str, normal_files: list, defective_files: list) -> dict:
+    arts      = load_artifacts(model_name)
+    threshold = arts["threshold"]
     tmp_dir   = tempfile.mkdtemp(prefix="easydefect_test_")
 
-    print(f"\n[test] Model: {model_name}  Threshold: {threshold:.6f}")
+    print(f"\n[test] Model: {model_name}  Threshold: {threshold:.8f}")
 
     results = []
     correct = 0
@@ -120,16 +135,15 @@ def test_images(model_name, normal_files, defective_files):
                 if os.path.getsize(tmp_path) == 0:
                     raise ValueError("0 byte file")
 
-                result     = predict_from_path(tmp_path, artifacts)
+                result     = predict_from_path(tmp_path, arts)
                 is_correct = result["prediction"] == ground_truth
                 if is_correct:
                     correct += 1
                 total += 1
 
                 print(
-                    f"  {'OK   ' if is_correct else 'WRONG'} "
-                    f"{f.filename:<28} score={result['error']:.6f}  "
-                    f"thresh={threshold:.6f}  "
+                    f"  {'OK   ' if is_correct else 'WRONG'} {f.filename:<28} "
+                    f"error={result['error']:.8f}  thresh={threshold:.8f}  "
                     f"-> {result['prediction']} (actual={ground_truth})"
                 )
                 results.append({
@@ -148,7 +162,7 @@ def test_images(model_name, normal_files, defective_files):
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
 
-    process(normal_files, "Normal")
+    process(normal_files,    "Normal")
     process(defective_files, "Defective")
     try:
         os.rmdir(tmp_dir)
@@ -157,5 +171,7 @@ def test_images(model_name, normal_files, defective_files):
 
     accuracy = round((correct / total) * 100, 2) if total > 0 else 0
     print(f"[test] Result: {correct}/{total} correct ({accuracy}%)\n")
-    return {"model_name": model_name, "accuracy": accuracy,
-            "correct": correct, "total": total, "results": results}
+    return {
+        "model_name": model_name, "accuracy": accuracy,
+        "correct": correct, "total": total, "results": results,
+    }
