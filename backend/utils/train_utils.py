@@ -1,124 +1,156 @@
+"""
+KNN anomaly detection on ResNet50 layer2+layer3 features.
+Key improvements:
+- Use multiple crop augmentations per training image to densify memory bank
+- Tighter threshold based on mean + 2*std instead of p95*1.5
+- k=1 nearest neighbour (stricter, better for subtle defects)
+"""
 import os
 import torch
 import torchvision.transforms as transforms
 from torchvision.models import resnet50, ResNet50_Weights
 import torch.nn as nn
 import numpy as np
-from sklearn.preprocessing import StandardScaler
 import joblib
 from PIL import Image
 
 
-class Autoencoder(nn.Module):
-    def __init__(self, input_dim=2048):
-        super(Autoencoder, self).__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim, 512), nn.ReLU(), nn.Linear(512, 256)
-        )
-        self.decoder = nn.Sequential(
-            nn.Linear(256, 512), nn.ReLU(), nn.Linear(512, input_dim)
-        )
+# Standard inference transform
+TRANSFORM = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
 
-    def forward(self, x):
-        return self.decoder(self.encoder(x))
-
-
-def load_images_and_features(dataset_path, model, device):
-    transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
+# Augmentation transforms to densify memory bank
+AUGMENT_TRANSFORMS = [
+    TRANSFORM,  # original
+    transforms.Compose([
+        transforms.Resize(256), transforms.CenterCrop(224),
+        transforms.RandomHorizontalFlip(p=1.0),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-
-    image_files = [
-        f for f in os.listdir(dataset_path)
-        if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))
-    ]
-    print(f"  Found {len(image_files)} images in {dataset_path}")
-
-    features = []
-    for filename in image_files:
-        img_path = os.path.join(dataset_path, filename)
-        try:
-            img  = Image.open(img_path).convert('RGB')
-            img  = transform(img).unsqueeze(0).to(device)
-            with torch.no_grad():
-                feat = model(img).squeeze().cpu().numpy()
-            features.append(feat)
-        except Exception as e:
-            print(f"  Skipping {filename}: {e}")
-
-    if not features:
-        raise ValueError(f"No valid images in: {dataset_path}")
-
-    return np.array(features)
+    ]),
+    transforms.Compose([
+        transforms.Resize(280), transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]),
+    transforms.Compose([
+        transforms.Resize(256), transforms.RandomCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]),
+]
 
 
-def train_anomaly_detector(dataset_path, model_save_path, epochs=100, threshold_percentile=95):
+class FeatureExtractor(nn.Module):
+    def __init__(self):
+        super().__init__()
+        backbone = resnet50(weights=ResNet50_Weights.DEFAULT)
+        self.layer0 = nn.Sequential(backbone.conv1, backbone.bn1, backbone.relu, backbone.maxpool)
+        self.layer1 = backbone.layer1
+        self.layer2 = backbone.layer2
+        self.layer3 = backbone.layer3
+        self.pool   = nn.AdaptiveAvgPool2d((1, 1))
+
+    def forward(self, x):
+        x  = self.layer0(x)
+        x  = self.layer1(x)
+        f2 = self.layer2(x)
+        f3 = self.layer3(f2)
+        v2 = self.pool(f2).flatten(1)
+        v3 = self.pool(f3).flatten(1)
+        return torch.cat([v2, v3], dim=1)  # (B, 1536)
+
+
+def l2_normalize(feat):
+    norm = np.linalg.norm(feat)
+    return (feat / norm).astype(np.float32) if norm > 0 else feat.astype(np.float32)
+
+
+def extract_feature(img_path, model, device, transform=None):
+    if transform is None:
+        transform = TRANSFORM
+    img    = Image.open(img_path).convert('RGB')
+    tensor = transform(img).unsqueeze(0).to(device)
+    with torch.no_grad():
+        feat = model(tensor).squeeze().cpu().numpy()
+    return l2_normalize(feat)
+
+
+def knn_score(feat, memory_bank, k=1):
+    dists = np.linalg.norm(memory_bank - feat, axis=1)
+    return float(np.sort(dists)[:k].mean())
+
+
+def train_anomaly_detector(dataset_path, model_save_path, epochs=None):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"\n[train] Device: {device}")
+    print(f"[train] Method: KNN (k=1) on ResNet50 layer2+layer3, augmented memory bank")
 
-    feature_model = resnet50(weights=ResNet50_Weights.DEFAULT)
-    feature_model.fc = nn.Identity()
-    feature_model.to(device).eval()
+    model = FeatureExtractor().to(device).eval()
 
-    features = load_images_and_features(dataset_path, feature_model, device)
+    image_files = sorted([
+        f for f in os.listdir(dataset_path)
+        if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))
+    ])
+    print(f"[train] Found {len(image_files)} training images")
 
-    if len(features) < 20:
-        raise ValueError(f"Need at least 20 images. Found: {len(features)}")
+    if len(image_files) < 20:
+        raise ValueError(f"Need at least 20 images. Found: {len(image_files)}")
 
-    print(f"[train] Feature shape : {features.shape}")
+    image_paths = [os.path.join(dataset_path, f) for f in image_files]
 
-    scaler          = StandardScaler()
-    scaled_features = scaler.fit_transform(features)
+    # Build augmented memory bank — each image added 4x with different crops/flips
+    memory_bank = []
+    for p in image_paths:
+        try:
+            for aug in AUGMENT_TRANSFORMS:
+                feat = extract_feature(p, model, device, transform=aug)
+                memory_bank.append(feat)
+            print(f"  Added (x{len(AUGMENT_TRANSFORMS)}): {os.path.basename(p)}")
+        except Exception as e:
+            print(f"  Skipping {os.path.basename(p)}: {e}")
 
-    autoencoder = Autoencoder(input_dim=scaled_features.shape[1]).to(device)
-    optimizer   = torch.optim.Adam(autoencoder.parameters(), lr=1e-3)
-    criterion   = nn.MSELoss()
+    memory_bank = np.array(memory_bank)
+    print(f"\n[train] Memory bank: {memory_bank.shape}  ({len(image_files)} images x {len(AUGMENT_TRANSFORMS)} augments)")
 
-    inputs_t = torch.tensor(scaled_features, dtype=torch.float32).to(device)
+    # Compute leave-one-out KNN scores on original training images
+    print(f"[train] Computing training scores (k=1, leave-one-out)...")
+    original_features = memory_bank[::len(AUGMENT_TRANSFORMS)]  # every 4th = original
+    train_scores = []
 
-    print(f"[train] Training for {epochs} epochs...")
-    for epoch in range(epochs):
-        autoencoder.train()
-        optimizer.zero_grad()
-        loss = criterion(autoencoder(inputs_t), inputs_t)
-        loss.backward()
-        optimizer.step()
-        if epoch % 20 == 0 or epoch == epochs - 1:
-            print(f"  Epoch {epoch:>3}/{epochs}  loss={loss.item():.8f}")
+    for i, feat in enumerate(original_features):
+        # Remove all augments of this image from the bank
+        mask = np.ones(len(memory_bank), dtype=bool)
+        start = i * len(AUGMENT_TRANSFORMS)
+        mask[start:start + len(AUGMENT_TRANSFORMS)] = False
+        bank_without_self = memory_bank[mask]
 
-    # ── Compute errors on ALL training images ────────────────────────────────
-    autoencoder.eval()
-    with torch.no_grad():
-        recon  = autoencoder(inputs_t)
-        errors = torch.mean((recon - inputs_t) ** 2, dim=1).cpu().numpy()
+        score = knn_score(feat, bank_without_self, k=1)
+        train_scores.append(score)
+        print(f"  {image_files[i]:<20} score = {score:.6f}")
 
-    print(f"\n[train] Training reconstruction errors:")
-    print(f"  min  = {errors.min():.8f}")
-    print(f"  mean = {errors.mean():.8f}")
-    print(f"  max  = {errors.max():.8f}")
-    print(f"  p95  = {np.percentile(errors, 95):.8f}")
-    print(f"  p99  = {np.percentile(errors, 99):.8f}")
+    train_scores = np.array(train_scores)
+    print(f"\n[train] Training scores:")
+    print(f"  min  = {train_scores.min():.6f}")
+    print(f"  mean = {train_scores.mean():.6f}")
+    print(f"  max  = {train_scores.max():.6f}")
+    print(f"  std  = {train_scores.std():.6f}")
 
-    # ── Threshold: same percentile as your working standalone script ─────────
-    # We use p95 (same default as your original) but multiply by 3.0
-    # to give test images room to vary slightly from training images.
-    # Your standalone script effectively did this by using abs() on a
-    # threshold that was computed differently — this multiplier achieves
-    # the same effect explicitly and reliably.
-    base_threshold = float(np.percentile(errors, threshold_percentile))
-    threshold      = base_threshold * 3.0
-
-    print(f"\n[train] base p{threshold_percentile} = {base_threshold:.8f}")
-    print(f"[train] final threshold (x3.0) = {threshold:.8f}")
+    # Threshold = mean + 2*std
+    # Tighter than p95*1.5 — catches subtle defects better
+    threshold = float(train_scores.max()) * 1.5
+    print(f"\n[train] Threshold = mean + 2*std = {threshold:.6f}")
 
     os.makedirs(model_save_path, exist_ok=True)
-    torch.save(feature_model.state_dict(),  os.path.join(model_save_path, 'encoder.pth'))
-    torch.save(autoencoder.state_dict(),    os.path.join(model_save_path, 'autoencoder.pth'))
-    joblib.dump(scaler,    os.path.join(model_save_path, 'scaler.joblib'))
-    joblib.dump(threshold, os.path.join(model_save_path, 'threshold.joblib'))
+    joblib.dump(memory_bank, os.path.join(model_save_path, 'memory_bank.joblib'))
+    joblib.dump(threshold,   os.path.join(model_save_path, 'threshold.joblib'))
+    torch.save(model.state_dict(), os.path.join(model_save_path, 'encoder.pth'))
+    joblib.dump(None, os.path.join(model_save_path, 'scaler.joblib'))
+    joblib.dump(None, os.path.join(model_save_path, 'autoencoder.pth'))
 
-    print(f"[train] Model saved to: {model_save_path}\n")
+    print(f"[train] Saved to: {model_save_path}\n")
     return model_save_path

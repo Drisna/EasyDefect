@@ -36,7 +36,7 @@ const HomePage = () => {
           <div className="card">
             <h3>1️⃣ Upload Training Images</h3>
             <p>
-              Select at least 25 normal images to prepare your training dataset.
+              Select at least 20 normal images to prepare your training dataset.
             </p>
           </div>
 

@@ -1,314 +1,253 @@
-// import React, { useState } from "react";
-// import "../styles/TestingPage.css";
-
-// const TestingPage = () => {
-//   const [normalImages, setNormalImages] = useState([]);
-//   const [defectiveImages, setDefectiveImages] = useState([]);
-
-//   const [accuracy, setAccuracy] = useState(null);
-//   const [normalCorrect, setNormalCorrect] = useState(0);
-//   const [defectiveCorrect, setDefectiveCorrect] = useState(0);
-
-//   const [modelName, setModelName] = useState("EasyDefect_Model");
-
-//   const handleNormalUpload = (e) => {
-//     const files = Array.from(e.target.files);
-//     const newImages = files.map((file) => ({
-//       file,
-//       url: URL.createObjectURL(file),
-//       prediction: "Not tested",
-//     }));
-//     setNormalImages((prev) => [...prev, ...newImages]);
-//   };
-
-//   const handleDefectiveUpload = (e) => {
-//     const files = Array.from(e.target.files);
-//     const newImages = files.map((file) => ({
-//       file,
-//       url: URL.createObjectURL(file),
-//       prediction: "Not tested",
-//     }));
-//     setDefectiveImages((prev) => [...prev, ...newImages]);
-//   };
-
-//   const removeNormal = (index) => {
-//     setNormalImages(normalImages.filter((_, i) => i !== index));
-//   };
-
-//   const removeDefective = (index) => {
-//     setDefectiveImages(defectiveImages.filter((_, i) => i !== index));
-//   };
-
-//   const handleTest = () => {
-//     const total = normalImages.length + defectiveImages.length;
-
-//     if (total < 30) {
-//       alert("Please upload at least 30 images to test.");
-//       return;
-//     }
-
-//     // Simulated prediction results
-//     const updatedNormal = normalImages.map((img) => ({
-//       ...img,
-//       prediction: "Normal",
-//     }));
-
-//     const updatedDefective = defectiveImages.map((img) => ({
-//       ...img,
-//       prediction: "Defective",
-//     }));
-
-//     setNormalImages(updatedNormal);
-//     setDefectiveImages(updatedDefective);
-
-//     const nCorrect = updatedNormal.length;
-//     const dCorrect = updatedDefective.length;
-
-//     setNormalCorrect(nCorrect);
-//     setDefectiveCorrect(dCorrect);
-
-//     const acc = ((nCorrect + dCorrect) / total) * 100;
-//     setAccuracy(acc.toFixed(2));
-//   };
-
-//   const handleDownload = () => {
-//     const content = `
-//       Model Name: ${modelName}
-//       Accuracy: ${accuracy ? accuracy + "%" : "Not tested"}
-//       Normal Correct: ${normalCorrect} / ${normalImages.length}
-//       Defective Correct: ${defectiveCorrect} / ${defectiveImages.length}
-//     `;
-
-//     const blob = new Blob([content], { type: "text/plain" });
-//     const link = document.createElement("a");
-//     link.href = URL.createObjectURL(blob);
-//     link.download = `${modelName}_result.txt`;
-//     link.click();
-//   };
-
-//   return (
-//     <div className="testing-page">
-//       <h1>Test Your Model</h1>
-
-//       <div className="testing-container">
-//         {/* LEFT HALF */}
-//         <div className="test-image-panel">
-//           <h3>Normal Images</h3>
-//           <input type="file" multiple onChange={handleNormalUpload} />
-
-//           <div className="image-grid">
-//             {normalImages.map((img, index) => (
-//               <div key={index} className="image-card">
-//                 <img src={img.url} alt="normal" />
-//                 <button className="delete-btn" onClick={() => removeNormal(index)}>
-//                   ✕
-//                 </button>
-//                 <p className="prediction normal">{img.prediction}</p>
-//               </div>
-//             ))}
-//           </div>
-
-//           <h3 style={{ marginTop: "25px" }}>Defective Images</h3>
-//           <input type="file" multiple onChange={handleDefectiveUpload} />
-
-//           <div className="image-grid">
-//             {defectiveImages.map((img, index) => (
-//               <div key={index} className="image-card">
-//                 <img src={img.url} alt="defective" />
-//                 <button className="delete-btn" onClick={() => removeDefective(index)}>
-//                   ✕
-//                 </button>
-//                 <p className="prediction defective">{img.prediction}</p>
-//               </div>
-//             ))}
-//           </div>
-//         </div>
-
-//         {/* RIGHT HALF */}
-//         <div className="test-panel">
-//           <div className="test-center">
-//             <h3>Run Test</h3>
-
-//             <button className="btn primary" onClick={handleTest}>
-//               Test Model
-//             </button>
-
-//             <div className="result-box">
-//               <p className="accuracy-text">
-//                 Accuracy: {accuracy ? `${accuracy}%` : "Not tested yet"}
-//               </p>
-
-//               <p className="report-text">
-//                 Normal Predicted Correctly: {normalCorrect} / {normalImages.length}
-//               </p>
-//               <p className="report-text">
-//                 Defective Predicted Correctly: {defectiveCorrect} / {defectiveImages.length}
-//               </p>
-//             </div>
-
-//             {accuracy && (
-//               <button className="btn secondary" onClick={handleDownload}>
-//                 Download Model
-//               </button>
-//             )}
-
-//             <p className="note">
-//               Minimum 30 images required for testing
-//             </p>
-//           </div>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default TestingPage;
-
-
 import React, { useState, useEffect } from "react";
 import "../styles/TestingPage.css";
 
 const TestingPage = () => {
-  const [normalImages, setNormalImages] = useState([]);
+  const [normalImages,    setNormalImages]    = useState([]);
   const [defectiveImages, setDefectiveImages] = useState([]);
 
-  const [models, setModels] = useState([]);
+  const [models,    setModels]    = useState([]);
   const [modelName, setModelName] = useState("");
 
-  const [accuracy, setAccuracy] = useState(null);
-  const [normalCorrect, setNormalCorrect] = useState(0);
-  const [defectiveCorrect, setDefectiveCorrect] = useState(0);
+  const [accuracy,        setAccuracy]        = useState(null);
+  const [normalCorrect,   setNormalCorrect]   = useState(0);
+  const [defectiveCorrect,setDefectiveCorrect]= useState(0);
+  const [totalTested,     setTotalTested]     = useState(0);
 
-  // 🔥 Fetch trained models from backend
+  const [isTesting,  setIsTesting]  = useState(false);
+  const [errorMsg,   setErrorMsg]   = useState("");
+  const [testDone,   setTestDone]   = useState(false);
+
+  // ── Fetch trained model list from backend ────────────────────────────────
   useEffect(() => {
     fetch("http://localhost:5000/api/models/")
       .then(res => res.json())
       .then(data => {
-        setModels(data.models);
-        if (data.models.length > 0) {
+        setModels(data.models || []);
+        if (data.models && data.models.length > 0) {
           setModelName(data.models[0]);
         }
-      });
+      })
+      .catch(() => setErrorMsg("Could not load models. Is the backend running?"));
   }, []);
 
   const handleNormalUpload = (e) => {
     const files = Array.from(e.target.files);
-    const newImages = files.map((file) => ({
+    const newImages = files.map(file => ({
       file,
-      url: URL.createObjectURL(file),
+      url:        URL.createObjectURL(file),
       prediction: "Not tested",
+      correct:    null,
     }));
     setNormalImages(prev => [...prev, ...newImages]);
+    setTestDone(false);
   };
 
   const handleDefectiveUpload = (e) => {
     const files = Array.from(e.target.files);
-    const newImages = files.map((file) => ({
+    const newImages = files.map(file => ({
       file,
-      url: URL.createObjectURL(file),
+      url:        URL.createObjectURL(file),
       prediction: "Not tested",
+      correct:    null,
     }));
     setDefectiveImages(prev => [...prev, ...newImages]);
+    setTestDone(false);
   };
 
+  const removeNormal    = (i) => setNormalImages(normalImages.filter((_, idx) => idx !== i));
+  const removeDefective = (i) => setDefectiveImages(defectiveImages.filter((_, idx) => idx !== i));
+
+  // ── Run test ─────────────────────────────────────────────────────────────
   const handleTest = async () => {
+    setErrorMsg("");
+
     if (!modelName) {
-      alert("Please select a model");
+      setErrorMsg("Please select a model first.");
+      return;
+    }
+    if (normalImages.length === 0 && defectiveImages.length === 0) {
+      setErrorMsg("Upload at least one image to test.");
       return;
     }
 
+    setIsTesting(true);
+
     const formData = new FormData();
     formData.append("model_name", modelName);
+    normalImages.forEach(img    => formData.append("normal_files",    img.file));
+    defectiveImages.forEach(img => formData.append("defective_files", img.file));
 
-    normalImages.forEach(img => {
-      formData.append("normal_files", img.file);
-    });
+    try {
+      const response = await fetch("http://localhost:5000/api/test/", {
+        method: "POST",
+        body:   formData,
+      });
 
-    defectiveImages.forEach(img => {
-      formData.append("defective_files", img.file);
-    });
+      const data = await response.json();
 
-    const response = await fetch("http://localhost:5000/api/test/", {
-      method: "POST",
-      body: formData
-    });
+      if (!response.ok) {
+        setErrorMsg(data.error || "Testing failed.");
+        setIsTesting(false);
+        return;
+      }
 
-    const data = await response.json();
+      // ── Map results back to images ──────────────────────────────────────
+      // Backend uses "Normal" / "Defective" — match exactly
+      const updatedNormal = normalImages.map(img => {
+        const result = data.results.find(r => r.filename === img.file.name);
+        return {
+          ...img,
+          prediction: result?.prediction ?? "Error",
+          correct:    result?.correct    ?? false,
+        };
+      });
 
-    setAccuracy(data.accuracy);
+      const updatedDefective = defectiveImages.map(img => {
+        const result = data.results.find(r => r.filename === img.file.name);
+        return {
+          ...img,
+          prediction: result?.prediction ?? "Error",
+          correct:    result?.correct    ?? false,
+        };
+      });
 
-    const updatedNormal = normalImages.map(img => {
-      const result = data.results.find(r => r.filename === img.file.name);
-      return { ...img, prediction: result?.prediction || "Error" };
-    });
+      setNormalImages(updatedNormal);
+      setDefectiveImages(updatedDefective);
 
-    const updatedDefective = defectiveImages.map(img => {
-      const result = data.results.find(r => r.filename === img.file.name);
-      return { ...img, prediction: result?.prediction || "Error" };
-    });
+      setAccuracy(data.accuracy);
+      setTotalTested(data.total);
 
-    setNormalImages(updatedNormal);
-    setDefectiveImages(updatedDefective);
+      const nCorrect = data.results.filter(r => r.actual === "Normal"    && r.correct).length;
+      const dCorrect = data.results.filter(r => r.actual === "Defective" && r.correct).length;
+      setNormalCorrect(nCorrect);
+      setDefectiveCorrect(dCorrect);
 
-    const nCorrect = data.results.filter(r => r.actual === "Normal" && r.prediction === "Normal").length;
-    const dCorrect = data.results.filter(r => r.actual === "Defective" && r.prediction === "Defective").length;
+      setTestDone(true);
 
-    setNormalCorrect(nCorrect);
-    setDefectiveCorrect(dCorrect);
+    } catch (err) {
+      setErrorMsg("Network error. Make sure the backend is running.");
+      console.error(err);
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  // ── Download model zip from backend ──────────────────────────────────────
+  const handleDownload = () => {
+    if (!modelName) return;
+    window.location.href = `http://localhost:5000/api/models/download/${modelName}`;
+  };
+
+  // ── Label colour helper ───────────────────────────────────────────────────
+  const labelClass = (prediction) => {
+    if (prediction === "Normal")    return "prediction normal-label";
+    if (prediction === "Defective") return "prediction defective-label";
+    return "prediction";
   };
 
   return (
     <div className="testing-page">
       <h1>Test Your Model</h1>
 
-      {/* 🔥 Model Selector */}
-      <div style={{ marginBottom: "20px" }}>
+      {/* Model selector */}
+      <div className="model-selector">
         <label>Select Model: </label>
-        <select value={modelName} onChange={(e) => setModelName(e.target.value)}>
-          {models.map((model, index) => (
-            <option key={index} value={model}>{model}</option>
-          ))}
-        </select>
+        {models.length === 0 ? (
+          <span className="no-models">No trained models found. Train a model first.</span>
+        ) : (
+          <select value={modelName} onChange={e => setModelName(e.target.value)}>
+            {models.map((m, i) => (
+              <option key={i} value={m}>{m}</option>
+            ))}
+          </select>
+        )}
       </div>
 
+      {errorMsg && <p className="error-text">{errorMsg}</p>}
+
       <div className="testing-container">
+
+        {/* ── LEFT: Image panels ─────────────────────────────────────────── */}
         <div className="test-image-panel">
-          <h3>Normal Images</h3>
-          <input type="file" multiple onChange={handleNormalUpload} />
 
+          <h3>Normal Images ({normalImages.length})</h3>
+          <input
+            type="file"
+            multiple
+            accept=".jpg,.jpeg,.png,.bmp"
+            onChange={handleNormalUpload}
+            disabled={isTesting}
+          />
           <div className="image-grid">
-            {normalImages.map((img, index) => (
-              <div key={index} className="image-card">
+            {normalImages.map((img, i) => (
+              <div key={i} className={`image-card ${img.correct === false && testDone ? "wrong" : img.correct ? "right" : ""}`}>
                 <img src={img.url} alt="normal" />
-                <p className="prediction">{img.prediction}</p>
+                <button className="delete-btn" onClick={() => removeNormal(i)} disabled={isTesting}>✕</button>
+                <p className={labelClass(img.prediction)}>{img.prediction}</p>
               </div>
             ))}
           </div>
 
-          <h3 style={{ marginTop: "25px" }}>Defective Images</h3>
-          <input type="file" multiple onChange={handleDefectiveUpload} />
-
+          <h3 style={{ marginTop: "25px" }}>Defective Images ({defectiveImages.length})</h3>
+          <input
+            type="file"
+            multiple
+            accept=".jpg,.jpeg,.png,.bmp"
+            onChange={handleDefectiveUpload}
+            disabled={isTesting}
+          />
           <div className="image-grid">
-            {defectiveImages.map((img, index) => (
-              <div key={index} className="image-card">
+            {defectiveImages.map((img, i) => (
+              <div key={i} className={`image-card ${img.correct === false && testDone ? "wrong" : img.correct ? "right" : ""}`}>
                 <img src={img.url} alt="defective" />
-                <p className="prediction">{img.prediction}</p>
+                <button className="delete-btn" onClick={() => removeDefective(i)} disabled={isTesting}>✕</button>
+                <p className={labelClass(img.prediction)}>{img.prediction}</p>
               </div>
             ))}
           </div>
         </div>
 
+        {/* ── RIGHT: Controls + results ──────────────────────────────────── */}
         <div className="test-panel">
-          <button className="btn primary" onClick={handleTest}>
-            Test Model
-          </button>
+          <div className="test-center">
+            <h3>Run Test</h3>
 
-          <div className="result-box">
-            <p>Accuracy: {accuracy ? `${accuracy}%` : "Not tested yet"}</p>
-            <p>Normal Correct: {normalCorrect}</p>
-            <p>Defective Correct: {defectiveCorrect}</p>
+            <button
+              className="btn primary"
+              onClick={handleTest}
+              disabled={isTesting || models.length === 0}
+            >
+              {isTesting ? "Testing…" : "Test Model"}
+            </button>
+
+            <div className="result-box">
+              <p className="accuracy-text">
+                Accuracy: {accuracy !== null ? `${accuracy}%` : "Not tested yet"}
+              </p>
+              <p className="report-text">
+                Normal Correct: {normalCorrect} / {normalImages.length}
+              </p>
+              <p className="report-text">
+                Defective Correct: {defectiveCorrect} / {defectiveImages.length}
+              </p>
+              {totalTested > 0 && (
+                <p className="report-text">Total Tested: {totalTested}</p>
+              )}
+            </div>
+
+            {/* Download model button — only shown after testing */}
+            {testDone && (
+              <button className="btn secondary" onClick={handleDownload}>
+                ⬇ Download Model
+              </button>
+            )}
+
+            <p className="note">
+              Upload normal and/or defective images, then click "Test Model"
+            </p>
           </div>
         </div>
+
       </div>
     </div>
   );
