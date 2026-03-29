@@ -7,8 +7,18 @@ import numpy as np
 import joblib
 from PIL import Image
 
+# ── Fix random seed so every training run gives identical results ─────────────
+# Without this, weight initialization differs every run → different accuracy
+SEED = 42
 
-# ── Transform — identical in train and test ──────────────────────────────────
+def set_seed(seed=SEED):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark     = False
+
+
 TRANSFORM = transforms.Compose([
     transforms.Resize(256),
     transforms.CenterCrop(224),
@@ -17,10 +27,6 @@ TRANSFORM = transforms.Compose([
 ])
 
 
-# ── Autoencoder with very tight bottleneck ───────────────────────────────────
-# Bottleneck = 64 (vs 256 before). Smaller bottleneck = harder to reconstruct
-# anything the model hasn't seen. Defective images will fail to compress/decompress
-# correctly because the bottleneck only learned the normal manifold.
 class Autoencoder(nn.Module):
     def __init__(self, input_dim=2048):
         super().__init__()
@@ -34,22 +40,21 @@ class Autoencoder(nn.Module):
             nn.Linear(128, 512),       nn.BatchNorm1d(512), nn.ReLU(),
             nn.Linear(512, input_dim),
         )
-
     def forward(self, x):
         return self.decoder(self.encoder(x))
 
 
 def extract_feature(img_path, feature_model, device):
     """
-    Extract raw ResNet50 features and L2-normalize.
-    NO StandardScaler — it causes 10000x errors on single-image transform.
-    L2 normalization maps all features to unit sphere, stable for any batch size.
+    L2-normalized ResNet50 feature.
+    NO StandardScaler — it produces 10000x different values when
+    transforming one image vs a batch, causing huge errors at test time.
+    L2 normalization is stable for any batch size.
     """
     img    = Image.open(img_path).convert('RGB')
     tensor = TRANSFORM(img).unsqueeze(0).to(device)
     with torch.no_grad():
-        feat = feature_model(tensor).squeeze().cpu().numpy()  # (2048,)
-    # L2 normalize
+        feat = feature_model(tensor).squeeze().cpu().numpy()
     norm = np.linalg.norm(feat)
     if norm > 0:
         feat = feat / norm
@@ -57,12 +62,13 @@ def extract_feature(img_path, feature_model, device):
 
 
 def train_anomaly_detector(dataset_path, model_save_path, epochs=300):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"\n[train] Device: {device}")
-    print(f"[train] Method: Autoencoder on L2-normalized ResNet50 features")
-    print(f"[train] Bottleneck: 2048 -> 512 -> 128 -> 64 -> 128 -> 512 -> 2048")
+    # ── Set seed FIRST — before any model or tensor creation ─────────────────
+    set_seed(SEED)
+    print(f"[train] Random seed fixed to {SEED} — results will be identical every run")
 
-    # Feature extractor (frozen)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"[train] Device: {device}")
+
     feature_model = resnet50(weights=ResNet50_Weights.DEFAULT)
     feature_model.fc = nn.Identity()
     feature_model.to(device).eval()
@@ -78,7 +84,7 @@ def train_anomaly_detector(dataset_path, model_save_path, epochs=300):
 
     image_paths = [os.path.join(dataset_path, f) for f in image_files]
 
-    # Extract L2-normalized features for all training images
+    # Extract L2-normalized features
     features = []
     for p in image_paths:
         try:
@@ -86,13 +92,13 @@ def train_anomaly_detector(dataset_path, model_save_path, epochs=300):
         except Exception as e:
             print(f"  Skip {os.path.basename(p)}: {e}")
 
-    features_np = np.array(features)  # (N, 2048), all unit vectors
-    print(f"[train] Feature shape : {features_np.shape}")
-    print(f"[train] Feature range : [{features_np.min():.4f}, {features_np.max():.4f}]")
+    features_np = np.array(features)
+    print(f"[train] Feature shape: {features_np.shape}")
+    print(f"[train] Feature range: [{features_np.min():.4f}, {features_np.max():.4f}]")
 
     inputs_t = torch.tensor(features_np, dtype=torch.float32).to(device)
 
-    # Train autoencoder
+    # Autoencoder — seed already set so weights init identically every run
     autoencoder = Autoencoder(input_dim=2048).to(device)
     optimizer   = torch.optim.Adam(autoencoder.parameters(), lr=1e-3, weight_decay=1e-4)
     scheduler   = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
@@ -110,14 +116,12 @@ def train_anomaly_detector(dataset_path, model_save_path, epochs=300):
             print(f"  Epoch {epoch:>3}/{epochs}  loss={loss.item():.8f}")
 
     # ── Compute threshold via inference pipeline ──────────────────────────────
-    # Run each training image through extract_feature() then autoencoder
-    # This is IDENTICAL to what test_utils does, so errors are calibrated
     autoencoder.eval()
-    print(f"\n[train] Computing inference-pipeline errors on training images...")
+    print(f"\n[train] Computing inference errors on training images...")
     inference_errors = []
 
     for p in image_paths:
-        feat = extract_feature(p, feature_model, device)            # L2-normalized (2048,)
+        feat = extract_feature(p, feature_model, device)
         inp  = torch.tensor(feat, dtype=torch.float32).unsqueeze(0).to(device)
         with torch.no_grad():
             out   = autoencoder(inp)
@@ -126,24 +130,19 @@ def train_anomaly_detector(dataset_path, model_save_path, epochs=300):
         print(f"  {os.path.basename(p):<20} error = {error:.8f}")
 
     errors = np.array(inference_errors)
-    print(f"\n[train] Inference errors on training images:")
+    print(f"\n[train] Training errors:")
     print(f"  min  = {errors.min():.8f}")
     print(f"  mean = {errors.mean():.8f}")
     print(f"  max  = {errors.max():.8f}")
-    print(f"  p95  = {np.percentile(errors, 95):.8f}")
-    print(f"  p99  = {np.percentile(errors, 99):.8f}")
 
-    # Threshold = max * 3.0
-    # max guarantees all training images pass as Normal
-    # 3.0x buffer for unseen normal test images
     threshold = float(errors.max()) * 3.0
     print(f"\n[train] Threshold = max ({errors.max():.8f}) x 3.0 = {threshold:.8f}")
+    print(f"[train] This threshold is now FIXED — retraining gives identical results")
 
-    # Save
     os.makedirs(model_save_path, exist_ok=True)
     torch.save(feature_model.state_dict(),  os.path.join(model_save_path, 'encoder.pth'))
     torch.save(autoencoder.state_dict(),    os.path.join(model_save_path, 'autoencoder.pth'))
-    joblib.dump(None,      os.path.join(model_save_path, 'scaler.joblib'))   # no scaler
+    joblib.dump(None,      os.path.join(model_save_path, 'scaler.joblib'))
     joblib.dump(threshold, os.path.join(model_save_path, 'threshold.joblib'))
 
     print(f"[train] Saved to: {model_save_path}\n")
