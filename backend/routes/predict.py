@@ -1,6 +1,7 @@
 import os
 import sys
 import traceback
+import uuid
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 
@@ -55,7 +56,9 @@ def upload_image():
         # Ensures the full file is written even if stream was partially read
         file.stream.seek(0)
 
-        filename  = secure_filename(file.filename)
+        original = secure_filename(file.filename)
+        stem, ext = os.path.splitext(original)
+        filename = f"{stem}_{uuid.uuid4().hex[:8]}{ext.lower()}"
         file_path = os.path.join(UPLOAD_FOLDER, filename)
         file.save(file_path)
 

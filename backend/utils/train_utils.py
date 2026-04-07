@@ -1,4 +1,5 @@
 import os
+import random
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
@@ -12,11 +13,13 @@ from PIL import Image
 SEED = 42
 
 def set_seed(seed=SEED):
+    random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark     = False
+    torch.use_deterministic_algorithms(True, warn_only=True)
 
 
 TRANSFORM = transforms.Compose([
@@ -31,13 +34,13 @@ class Autoencoder(nn.Module):
     def __init__(self, input_dim=2048):
         super().__init__()
         self.encoder = nn.Sequential(
-            nn.Linear(input_dim, 512), nn.BatchNorm1d(512), nn.ReLU(),
-            nn.Linear(512, 128),       nn.BatchNorm1d(128), nn.ReLU(),
+            nn.Linear(input_dim, 512), nn.ReLU(),
+            nn.Linear(512, 128),       nn.ReLU(),
             nn.Linear(128, 64),
         )
         self.decoder = nn.Sequential(
-            nn.Linear(64, 128),        nn.BatchNorm1d(128), nn.ReLU(),
-            nn.Linear(128, 512),       nn.BatchNorm1d(512), nn.ReLU(),
+            nn.Linear(64, 128),        nn.ReLU(),
+            nn.Linear(128, 512),       nn.ReLU(),
             nn.Linear(512, input_dim),
         )
     def forward(self, x):
@@ -92,6 +95,9 @@ def train_anomaly_detector(dataset_path, model_save_path, epochs=300):
         except Exception as e:
             print(f"  Skip {os.path.basename(p)}: {e}")
 
+    if len(features) < 20:
+        raise ValueError(f"Need at least 20 valid images after preprocessing. Found: {len(features)}")
+
     features_np = np.array(features)
     print(f"[train] Feature shape: {features_np.shape}")
     print(f"[train] Feature range: [{features_np.min():.4f}, {features_np.max():.4f}]")
@@ -135,8 +141,12 @@ def train_anomaly_detector(dataset_path, model_save_path, epochs=300):
     print(f"  mean = {errors.mean():.8f}")
     print(f"  max  = {errors.max():.8f}")
 
-    threshold = float(errors.max()) * 3.0
-    print(f"\n[train] Threshold = max ({errors.max():.8f}) x 3.0 = {threshold:.8f}")
+    # Robust thresholding to reduce under/over-classification.
+    # max*3 can be too loose and often predicts everything as Normal.
+    p99 = float(np.percentile(errors, 99))
+    iqr = float(np.percentile(errors, 75) - np.percentile(errors, 25))
+    threshold = p99 + 0.5 * max(iqr, 1e-8)
+    print(f"\n[train] Threshold = p99 ({p99:.8f}) + 0.5*IQR ({iqr:.8f}) = {threshold:.8f}")
     print(f"[train] This threshold is now FIXED — retraining gives identical results")
 
     os.makedirs(model_save_path, exist_ok=True)

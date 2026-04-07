@@ -28,6 +28,24 @@ class Autoencoder(nn.Module):
     def __init__(self, input_dim=2048):
         super().__init__()
         self.encoder = nn.Sequential(
+            nn.Linear(input_dim, 512), nn.ReLU(),
+            nn.Linear(512, 128),       nn.ReLU(),
+            nn.Linear(128, 64),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(64, 128),        nn.ReLU(),
+            nn.Linear(128, 512),       nn.ReLU(),
+            nn.Linear(512, input_dim),
+        )
+    def forward(self, x):
+        return self.decoder(self.encoder(x))
+
+
+class LegacyAutoencoder(nn.Module):
+    """Supports loading older saved models that used BatchNorm layers."""
+    def __init__(self, input_dim=2048):
+        super().__init__()
+        self.encoder = nn.Sequential(
             nn.Linear(input_dim, 512), nn.BatchNorm1d(512), nn.ReLU(),
             nn.Linear(512, 128),       nn.BatchNorm1d(128), nn.ReLU(),
             nn.Linear(128, 64),
@@ -76,10 +94,14 @@ def load_artifacts(model_name: str) -> dict:
     )
     feature_model.to(device).eval()
 
+    ae_state = torch.load(os.path.join(model_path, "autoencoder.pth"), map_location=device)
     autoencoder = Autoencoder(input_dim=2048)
-    autoencoder.load_state_dict(
-        torch.load(os.path.join(model_path, "autoencoder.pth"), map_location=device)
-    )
+    try:
+        autoencoder.load_state_dict(ae_state)
+    except RuntimeError:
+        # Fallback for older model artifacts.
+        autoencoder = LegacyAutoencoder(input_dim=2048)
+        autoencoder.load_state_dict(ae_state)
     autoencoder.to(device).eval()
 
     threshold = float(joblib.load(os.path.join(model_path, "threshold.joblib")))

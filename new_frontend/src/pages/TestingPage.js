@@ -94,7 +94,9 @@ const TestingPage = () => {
       // ── Map results back to images ──────────────────────────────────────
       // Backend uses "Normal" / "Defective" — match exactly
       const updatedNormal = normalImages.map(img => {
-        const result = data.results.find(r => r.filename === img.file.name);
+        const result = data.results.find(
+          r => r.filename === img.file.name && r.actual === "Normal"
+        );
         return {
           ...img,
           prediction: result?.prediction ?? "Error",
@@ -103,7 +105,9 @@ const TestingPage = () => {
       });
 
       const updatedDefective = defectiveImages.map(img => {
-        const result = data.results.find(r => r.filename === img.file.name);
+        const result = data.results.find(
+          r => r.filename === img.file.name && r.actual === "Defective"
+        );
         return {
           ...img,
           prediction: result?.prediction ?? "Error",
