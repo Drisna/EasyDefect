@@ -1,8 +1,12 @@
 import React from "react";
 import "../styles/HomePage.css";
 import { Link } from "react-router-dom";
+import { isAuthenticated } from "../utils/auth";
 
 const HomePage = () => {
+  const trainingRoute = isAuthenticated() ? "/train" : "/login";
+  const testingRoute = isAuthenticated() ? "/test" : "/login";
+
   return (
     <div className="home">
       {/* HERO SECTION */}
@@ -15,13 +19,13 @@ const HomePage = () => {
 
         <div className="home-buttons">
           <div className="home-btn-card">
-            <Link className="btn primary" to="/train">
+            <Link className="btn primary" to={trainingRoute}>
               Train a New Model
             </Link>
           </div>
 
           <div className="home-btn-card">
-            <Link className="btn secondary" to="/test">
+            <Link className="btn secondary" to={testingRoute}>
               Test Trained Model
             </Link>
           </div>

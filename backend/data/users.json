@@ -1,0 +1,12 @@
+[
+  {
+    "name": "hitech",
+    "email": "hitech@gmail.com",
+    "password_hash": "scrypt:32768:8:1$o2tzBOhXQI4LdI1f$8b29bc982c5a66a555b4d74943464d89873fa3d52019559d9713d2c5ffef872695b56f6c3e36fbead123e634dbbcfff3b2518ba3423c6e5c0d947461e614705b"
+  },
+  {
+    "name": "thrissur@gmail.com",
+    "email": "thrissur123",
+    "password_hash": "scrypt:32768:8:1$M3n5FJLJ04DM4dEO$2a46cb460001c13239b1868c1267bb5502543d3267f94e0412850b377f57c625bed9b69bf7887c00aeb31a9bf5537d09d7090cf3868d1a6ea38b04beadb9cf72"
+  }
+]

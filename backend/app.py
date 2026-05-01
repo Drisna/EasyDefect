@@ -66,12 +66,14 @@ def create_app():
     from routes.predict import predict_bp
     from routes.train import train_bp
     from routes.test import test_bp   #  ADD THIS
+    from routes.auth import auth_bp
 
     # Register blueprints
     app.register_blueprint(health_bp, url_prefix="/api/health")
     app.register_blueprint(predict_bp, url_prefix="/api/predict")
     app.register_blueprint(train_bp, url_prefix="/api/train")
     app.register_blueprint(test_bp, url_prefix="/api/test")   # ADD THIS
+    app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(models_bp, url_prefix="/api/models")
 
     @app.route("/")

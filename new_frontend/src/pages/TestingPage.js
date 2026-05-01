@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "../styles/TestingPage.css";
+import { getAuthHeaders, getCurrentUser, getCurrentUserDisplayName } from "../utils/auth";
 
 const TestingPage = () => {
   const [normalImages,    setNormalImages]    = useState([]);
@@ -19,7 +20,7 @@ const TestingPage = () => {
 
   // ── Fetch trained model list from backend ────────────────────────────────
   useEffect(() => {
-    fetch("http://localhost:5000/api/models/")
+    fetch("http://localhost:5000/api/models/", { headers: getAuthHeaders() })
       .then(res => res.json())
       .then(data => {
         setModels(data.models || []);
@@ -80,6 +81,7 @@ const TestingPage = () => {
     try {
       const response = await fetch("http://localhost:5000/api/test/", {
         method: "POST",
+        headers: getAuthHeaders(),
         body:   formData,
       });
 
@@ -139,7 +141,9 @@ const TestingPage = () => {
   // ── Download model zip from backend ──────────────────────────────────────
   const handleDownload = () => {
     if (!modelName) return;
-    window.location.href = `http://localhost:5000/api/models/download/${modelName}`;
+    const email = encodeURIComponent(getCurrentUser() || "");
+    const displayName = encodeURIComponent(getCurrentUserDisplayName() || "");
+    window.location.href = `http://localhost:5000/api/models/download/${modelName}?user_email=${email}&display_name=${displayName}`;
   };
 
   // ── Label colour helper ───────────────────────────────────────────────────

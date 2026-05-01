@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/TrainingPage.css";
+import { getAuthHeaders } from "../utils/auth";
 
 const TrainingPage = () => {
   const [images,         setImages]         = useState([]);
@@ -14,7 +15,10 @@ const TrainingPage = () => {
   // This prevents stale images from a previous session being included
   // in a new training run, which caused the "all defective" problem.
   useEffect(() => {
-    fetch("http://localhost:5000/api/predict/clear", { method: "DELETE" })
+    fetch("http://localhost:5000/api/predict/clear", {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    })
       .then(res => res.json())
       .then(data => console.log("[TrainingPage] Cleared uploads:", data.message))
       .catch(err => console.warn("[TrainingPage] Could not clear uploads:", err));
@@ -45,6 +49,7 @@ const TrainingPage = () => {
       try {
         const res = await fetch("http://localhost:5000/api/predict/", {
           method: "POST",
+          headers: getAuthHeaders(),
           body:   formData,
         });
 
@@ -107,7 +112,10 @@ const TrainingPage = () => {
     try {
       const response = await fetch("http://localhost:5000/api/train/", {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
         body:    JSON.stringify({ model_name: modelName.trim(), epochs: 100 }),
       });
 
@@ -118,7 +126,10 @@ const TrainingPage = () => {
       if (data.success) {
         setTrainingStatus("trained");
         // Clear uploads after successful training
-        fetch("http://localhost:5000/api/predict/clear", { method: "DELETE" })
+        fetch("http://localhost:5000/api/predict/clear", {
+          method: "DELETE",
+          headers: getAuthHeaders(),
+        })
           .catch(() => {});
       } else {
         setTrainingStatus("idle");

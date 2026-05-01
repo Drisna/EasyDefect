@@ -4,6 +4,7 @@ import traceback
 import uuid
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
+from utils.user_context import get_request_user_email, get_user_storage_key
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -29,6 +30,13 @@ def allowed_file(filename):
     )
 
 
+def _user_upload_folder(email):
+    user_key = get_user_storage_key(email)
+    folder = os.path.join(UPLOAD_FOLDER, user_key)
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+
 @predict_bp.route("/", methods=["POST"])
 def upload_image():
     """
@@ -36,6 +44,9 @@ def upload_image():
     Called by TrainingPage.js for each image selected.
     """
     global _session_started
+    email = get_request_user_email()
+    if not email:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
 
     if "file" not in request.files:
         return jsonify({"success": False, "message": "No file part in request"}), 400
@@ -59,7 +70,7 @@ def upload_image():
         original = secure_filename(file.filename)
         stem, ext = os.path.splitext(original)
         filename = f"{stem}_{uuid.uuid4().hex[:8]}{ext.lower()}"
-        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file_path = os.path.join(_user_upload_folder(email), filename)
         file.save(file_path)
 
         print(f"[predict] Saved: {filename}  ({os.path.getsize(file_path)} bytes)")
@@ -84,12 +95,16 @@ def clear_uploads():
     and from TrainingPage on component mount to clear stale images.
     """
     global _session_started
+    email = get_request_user_email()
+    if not email:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
     _session_started = False
 
     try:
         deleted = 0
-        for filename in os.listdir(UPLOAD_FOLDER):
-            file_path = os.path.join(UPLOAD_FOLDER, filename)
+        user_folder = _user_upload_folder(email)
+        for filename in os.listdir(user_folder):
+            file_path = os.path.join(user_folder, filename)
             if os.path.isfile(file_path):
                 os.remove(file_path)
                 deleted += 1

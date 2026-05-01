@@ -71,11 +71,12 @@ def extract_feature(img_path, feature_model, device):
     return feat.astype(np.float32)
 
 
-def load_artifacts(model_name: str) -> dict:
-    if model_name in _cache:
-        return _cache[model_name]
+def load_artifacts(model_name: str, user_model_root: str = MODEL_DIR) -> dict:
+    cache_key = f"{user_model_root}::{model_name}"
+    if cache_key in _cache:
+        return _cache[cache_key]
 
-    model_path = os.path.join(MODEL_DIR, model_name)
+    model_path = os.path.join(user_model_root, model_name)
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model '{model_name}' not found at: {model_path}")
 
@@ -113,7 +114,7 @@ def load_artifacts(model_name: str) -> dict:
         "threshold":     threshold,
         "device":        device,
     }
-    _cache[model_name] = arts
+    _cache[cache_key] = arts
     return arts
 
 
@@ -134,8 +135,8 @@ def predict_from_path(image_path: str, arts: dict) -> dict:
     return {"prediction": label, "error": round(error, 8), "threshold": round(threshold, 8)}
 
 
-def test_images(model_name: str, normal_files: list, defective_files: list) -> dict:
-    arts      = load_artifacts(model_name)
+def test_images(model_name: str, normal_files: list, defective_files: list, user_model_root: str = MODEL_DIR) -> dict:
+    arts      = load_artifacts(model_name, user_model_root=user_model_root)
     threshold = arts["threshold"]
     tmp_dir   = tempfile.mkdtemp(prefix="easydefect_test_")
 

@@ -7,8 +7,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Blueprint, request, jsonify
 from utils.test_utils import test_images
+from utils.user_context import get_request_user_email, get_user_storage_key
 
 test_bp = Blueprint("test", __name__)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
 
 
 @test_bp.route("/", methods=["POST"])
@@ -22,6 +25,10 @@ def test_model():
         defective_files  -- one or more defective images (optional)
     """
     model_name = request.form.get("model_name", "").strip()
+    email = get_request_user_email()
+
+    if not email:
+        return jsonify({"error": "Unauthorized"}), 401
 
     if not model_name:
         return jsonify({"error": "model_name is required"}), 400
@@ -37,7 +44,8 @@ def test_model():
         return jsonify({"error": "Upload at least one image to test"}), 400
 
     try:
-        results = test_images(model_name, normal_files, defective_files)
+        user_models_dir = os.path.join(MODELS_DIR, get_user_storage_key(email))
+        results = test_images(model_name, normal_files, defective_files, user_model_root=user_models_dir)
         return jsonify(results)
 
     except FileNotFoundError as e:
