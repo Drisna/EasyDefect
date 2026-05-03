@@ -145,14 +145,25 @@ OFFLINE_TEST_HTML = """<!DOCTYPE html>
     }
     .result-line {
       margin: 0;
-      padding: 10px 8px;
+      padding: 8px;
       text-align: center;
       font-size: 13px;
-      font-weight: 600;
       color: var(--muted);
       border-top: 1px solid var(--panel-border);
       background: #0d1324;
       line-height: 1.3;
+    }
+    .file-name {
+      margin: 0 0 4px;
+      color: #cbd5e1;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .detected-label {
+      margin: 0;
+      font-weight: 700;
     }
     .normal-label { color: #86efac; }
     .defective-label { color: #fca5a5; }
@@ -218,10 +229,21 @@ OFFLINE_TEST_HTML = """<!DOCTYPE html>
     }
 
     function caption(img, tested) {
-      if (!tested) return "Not tested yet";
-      if (img.prediction === "Normal") return "Detected as: Normal";
-      if (img.prediction === "Defective") return "Detected as: Defective";
-      return "Detected as: Error";
+      const safeName = escapeHtml(img.file.name);
+      let result = "Not tested yet";
+      if (tested && img.prediction === "Normal") result = "Detected as: Normal";
+      else if (tested && img.prediction === "Defective") result = "Detected as: Defective";
+      else if (tested) result = "Detected as: Error";
+      return `<p class="file-name" title="${safeName}">${safeName}</p><p class="detected-label">${result}</p>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
     function renderGrid() {
@@ -234,7 +256,7 @@ OFFLINE_TEST_HTML = """<!DOCTYPE html>
         card.innerHTML = `
           <img src="${img.url}" alt="upload">
           <button type="button" class="delete-btn" data-index="${i}">\u2715</button>
-          <p class="${capCls}">${caption(img, tested)}</p>
+          <div class="${capCls}">${caption(img, tested)}</div>
         `;
         el.grid.appendChild(card);
       });

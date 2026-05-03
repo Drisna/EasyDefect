@@ -8,5 +8,15 @@
     "name": "thrissur@gmail.com",
     "email": "thrissur123",
     "password_hash": "scrypt:32768:8:1$M3n5FJLJ04DM4dEO$2a46cb460001c13239b1868c1267bb5502543d3267f94e0412850b377f57c625bed9b69bf7887c00aeb31a9bf5537d09d7090cf3868d1a6ea38b04beadb9cf72"
+  },
+  {
+    "name": "abc",
+    "email": "abc@gmail.com",
+    "password_hash": "scrypt:32768:8:1$eAoB0t5DOD7tE4ST$1e457f850eaeb3424d6a4bec9370ada9a74058146dddd07a34e4f2f0dbebec8eada59f22c0f198392a53cbb11e3e88e28f27c7e37812f829d5bd7936b9415249"
+  },
+  {
+    "name": "abc",
+    "email": "ac@gmail.com",
+    "password_hash": "scrypt:32768:8:1$EuUNsNkwMUR7jUWD$b33ff5003188dd174ddd1b5dd3243c0341ab53c9a4ad14d618a958ff3eb4e43f4b27fcc2a0d4e6f2d9bda8a27f62ee6c05681370732472b5a8ad985f880b4bc0"
   }
 ]

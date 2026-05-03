@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/TrainingPage.css";
-import { getAuthHeaders } from "../utils/auth";
+import { getAuthHeaders, getCurrentUser, getCurrentUserDisplayName } from "../utils/auth";
 
 const TrainingPage = () => {
   const [images,         setImages]         = useState([]);
   const [modelName,      setModelName]      = useState("");
+  const [trainedModel,   setTrainedModel]   = useState("");
   const [trainingStatus, setTrainingStatus] = useState("idle");
   const [errorMsg,       setErrorMsg]       = useState("");
 
@@ -124,6 +125,7 @@ const TrainingPage = () => {
       catch { data = { success: false, message: `Server error ${response.status}` }; }
 
       if (data.success) {
+        setTrainedModel(modelName.trim());
         setTrainingStatus("trained");
         // Clear uploads after successful training
         fetch("http://localhost:5000/api/predict/clear", {
@@ -139,6 +141,17 @@ const TrainingPage = () => {
       setTrainingStatus("idle");
       setErrorMsg(`Server error: ${err.message}. Is the backend running?`);
     }
+  };
+
+  const handleDownload = () => {
+    const nameToDownload = trainedModel || modelName.trim();
+    if (!nameToDownload) return;
+
+    const email = encodeURIComponent(getCurrentUser() || "");
+    const displayName = encodeURIComponent(getCurrentUserDisplayName() || "");
+    const encodedModel = encodeURIComponent(nameToDownload);
+    window.location.href =
+      `http://localhost:5000/api/models/download/${encodedModel}?user_email=${email}&display_name=${displayName}`;
   };
 
 
@@ -221,6 +234,9 @@ const TrainingPage = () => {
             {trainingStatus === "trained" && (
               <>
                 <p className="success-text">✅ Training Complete!</p>
+                <button className="btn primary" onClick={handleDownload}>
+                  Download Offline App
+                </button>
                 <button className="btn secondary" onClick={() => navigate("/test")}>
                   Test Model →
                 </button>

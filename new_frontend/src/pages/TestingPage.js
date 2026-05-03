@@ -3,22 +3,22 @@ import "../styles/TestingPage.css";
 import { getAuthHeaders, getCurrentUser, getCurrentUserDisplayName } from "../utils/auth";
 
 const TestingPage = () => {
-  const [normalImages,    setNormalImages]    = useState([]);
+  const [normalImages, setNormalImages] = useState([]);
   const [defectiveImages, setDefectiveImages] = useState([]);
 
-  const [models,    setModels]    = useState([]);
+  const [models, setModels] = useState([]);
   const [modelName, setModelName] = useState("");
 
-  const [accuracy,        setAccuracy]        = useState(null);
-  const [normalCorrect,   setNormalCorrect]   = useState(0);
-  const [defectiveCorrect,setDefectiveCorrect]= useState(0);
-  const [totalTested,     setTotalTested]     = useState(0);
+  const [accuracy, setAccuracy] = useState(null);
+  const [normalCorrect, setNormalCorrect] = useState(0);
+  const [defectiveCorrect, setDefectiveCorrect] = useState(0);
+  const [totalTested, setTotalTested] = useState(0);
 
-  const [isTesting,  setIsTesting]  = useState(false);
-  const [errorMsg,   setErrorMsg]   = useState("");
-  const [testDone,   setTestDone]   = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [testDone, setTestDone] = useState(false);
 
-  // ── Fetch trained model list from backend ────────────────────────────────
+  // Fetch trained model list from backend for online testing.
   useEffect(() => {
     fetch("http://localhost:5000/api/models/", { headers: getAuthHeaders() })
       .then(res => res.json())
@@ -35,9 +35,9 @@ const TestingPage = () => {
     const files = Array.from(e.target.files);
     const newImages = files.map(file => ({
       file,
-      url:        URL.createObjectURL(file),
+      url: URL.createObjectURL(file),
       prediction: "Not tested",
-      correct:    null,
+      correct: null,
     }));
     setNormalImages(prev => [...prev, ...newImages]);
     setTestDone(false);
@@ -47,18 +47,17 @@ const TestingPage = () => {
     const files = Array.from(e.target.files);
     const newImages = files.map(file => ({
       file,
-      url:        URL.createObjectURL(file),
+      url: URL.createObjectURL(file),
       prediction: "Not tested",
-      correct:    null,
+      correct: null,
     }));
     setDefectiveImages(prev => [...prev, ...newImages]);
     setTestDone(false);
   };
 
-  const removeNormal    = (i) => setNormalImages(normalImages.filter((_, idx) => idx !== i));
+  const removeNormal = (i) => setNormalImages(normalImages.filter((_, idx) => idx !== i));
   const removeDefective = (i) => setDefectiveImages(defectiveImages.filter((_, idx) => idx !== i));
 
-  // ── Run test ─────────────────────────────────────────────────────────────
   const handleTest = async () => {
     setErrorMsg("");
 
@@ -75,14 +74,14 @@ const TestingPage = () => {
 
     const formData = new FormData();
     formData.append("model_name", modelName);
-    normalImages.forEach(img    => formData.append("normal_files",    img.file));
+    normalImages.forEach(img => formData.append("normal_files", img.file));
     defectiveImages.forEach(img => formData.append("defective_files", img.file));
 
     try {
       const response = await fetch("http://localhost:5000/api/test/", {
         method: "POST",
         headers: getAuthHeaders(),
-        body:   formData,
+        body: formData,
       });
 
       const data = await response.json();
@@ -93,8 +92,6 @@ const TestingPage = () => {
         return;
       }
 
-      // ── Map results back to images ──────────────────────────────────────
-      // Backend uses "Normal" / "Defective" — match exactly
       const updatedNormal = normalImages.map(img => {
         const result = data.results.find(
           r => r.filename === img.file.name && r.actual === "Normal"
@@ -102,7 +99,7 @@ const TestingPage = () => {
         return {
           ...img,
           prediction: result?.prediction ?? "Error",
-          correct:    result?.correct    ?? false,
+          correct: result?.correct ?? false,
         };
       });
 
@@ -113,7 +110,7 @@ const TestingPage = () => {
         return {
           ...img,
           prediction: result?.prediction ?? "Error",
-          correct:    result?.correct    ?? false,
+          correct: result?.correct ?? false,
         };
       });
 
@@ -123,13 +120,12 @@ const TestingPage = () => {
       setAccuracy(data.accuracy);
       setTotalTested(data.total);
 
-      const nCorrect = data.results.filter(r => r.actual === "Normal"    && r.correct).length;
+      const nCorrect = data.results.filter(r => r.actual === "Normal" && r.correct).length;
       const dCorrect = data.results.filter(r => r.actual === "Defective" && r.correct).length;
       setNormalCorrect(nCorrect);
       setDefectiveCorrect(dCorrect);
 
       setTestDone(true);
-
     } catch (err) {
       setErrorMsg("Network error. Make sure the backend is running.");
       console.error(err);
@@ -138,26 +134,46 @@ const TestingPage = () => {
     }
   };
 
-  // ── Download model zip from backend ──────────────────────────────────────
   const handleDownload = () => {
     if (!modelName) return;
     const email = encodeURIComponent(getCurrentUser() || "");
     const displayName = encodeURIComponent(getCurrentUserDisplayName() || "");
-    window.location.href = `http://localhost:5000/api/models/download/${modelName}?user_email=${email}&display_name=${displayName}`;
+    const encodedModel = encodeURIComponent(modelName);
+    window.location.href =
+      `http://localhost:5000/api/models/download/${encodedModel}?user_email=${email}&display_name=${displayName}`;
   };
 
-  // ── Label colour helper ───────────────────────────────────────────────────
   const labelClass = (prediction) => {
-    if (prediction === "Normal")    return "prediction normal-label";
+    if (prediction === "Normal") return "prediction normal-label";
     if (prediction === "Defective") return "prediction defective-label";
     return "prediction";
   };
+
+  const resultText = (prediction) => {
+    if (prediction === "Normal") return "Detected as: Normal";
+    if (prediction === "Defective") return "Detected as: Defective";
+    if (prediction === "Error") return "Detected as: Error";
+    return "Not tested yet";
+  };
+
+  const renderImageCard = (img, index, actualLabel, onRemove) => (
+    <div
+      key={index}
+      className={`image-card ${img.correct === false && testDone ? "wrong" : img.correct ? "right" : ""}`}
+    >
+      <img src={img.url} alt={actualLabel.toLowerCase()} />
+      <button className="delete-btn" onClick={() => onRemove(index)} disabled={isTesting}>x</button>
+      <div className="image-caption">
+        <p className="image-name" title={img.file.name}>{img.file.name}</p>
+        <p className={labelClass(img.prediction)}>{resultText(img.prediction)}</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="testing-page">
       <h1>Test Your Model</h1>
 
-      {/* Model selector */}
       <div className="model-selector">
         <label>Select Model: </label>
         {models.length === 0 ? (
@@ -174,10 +190,7 @@ const TestingPage = () => {
       {errorMsg && <p className="error-text">{errorMsg}</p>}
 
       <div className="testing-container">
-
-        {/* ── LEFT: Image panels ─────────────────────────────────────────── */}
         <div className="test-image-panel">
-
           <h3>Normal Images ({normalImages.length})</h3>
           <input
             type="file"
@@ -187,13 +200,7 @@ const TestingPage = () => {
             disabled={isTesting}
           />
           <div className="image-grid">
-            {normalImages.map((img, i) => (
-              <div key={i} className={`image-card ${img.correct === false && testDone ? "wrong" : img.correct ? "right" : ""}`}>
-                <img src={img.url} alt="normal" />
-                <button className="delete-btn" onClick={() => removeNormal(i)} disabled={isTesting}>✕</button>
-                <p className={labelClass(img.prediction)}>{img.prediction}</p>
-              </div>
-            ))}
+            {normalImages.map((img, i) => renderImageCard(img, i, "Normal", removeNormal))}
           </div>
 
           <h3 style={{ marginTop: "25px" }}>Defective Images ({defectiveImages.length})</h3>
@@ -205,17 +212,10 @@ const TestingPage = () => {
             disabled={isTesting}
           />
           <div className="image-grid">
-            {defectiveImages.map((img, i) => (
-              <div key={i} className={`image-card ${img.correct === false && testDone ? "wrong" : img.correct ? "right" : ""}`}>
-                <img src={img.url} alt="defective" />
-                <button className="delete-btn" onClick={() => removeDefective(i)} disabled={isTesting}>✕</button>
-                <p className={labelClass(img.prediction)}>{img.prediction}</p>
-              </div>
-            ))}
+            {defectiveImages.map((img, i) => renderImageCard(img, i, "Defective", removeDefective))}
           </div>
         </div>
 
-        {/* ── RIGHT: Controls + results ──────────────────────────────────── */}
         <div className="test-panel">
           <div className="test-center">
             <h3>Run Test</h3>
@@ -225,7 +225,7 @@ const TestingPage = () => {
               onClick={handleTest}
               disabled={isTesting || models.length === 0}
             >
-              {isTesting ? "Testing…" : "Test Model"}
+              {isTesting ? "Testing..." : "Test Model"}
             </button>
 
             <div className="result-box">
@@ -243,10 +243,9 @@ const TestingPage = () => {
               )}
             </div>
 
-            {/* Download model button — only shown after testing */}
-            {testDone && (
+            {models.length > 0 && (
               <button className="btn secondary" onClick={handleDownload}>
-                ⬇ Download Model
+                Download Offline App
               </button>
             )}
 
@@ -255,7 +254,6 @@ const TestingPage = () => {
             </p>
           </div>
         </div>
-
       </div>
     </div>
   );

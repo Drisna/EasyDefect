@@ -14,6 +14,12 @@ __pycache__/
 uploads/
 models/
 
+# Generated offline executable bundle
+build/
+dist/
+offline_build/
+offline_dist/
+
 # Logs
 *.log
 
